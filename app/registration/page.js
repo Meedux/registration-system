@@ -463,6 +463,13 @@ function RegistrationFormPage() {
     setError('');
 
     try {
+      // Check if document is uploaded (required)
+      if (!uploadedFile) {
+        setError('Please upload a valid document before submitting your registration.');
+        setIsLoading(false);
+        return;
+      }
+
       // Validate all required fields are filled
       const allFormData = methods.getValues();
       
@@ -853,8 +860,10 @@ function RegistrationFormPage() {
                     <Button
                       type="submit"
                       loading={isLoading}
+                      disabled={!uploadedFile || isLoading}
+                      className={!uploadedFile ? 'opacity-50 cursor-not-allowed' : ''}
                     >
-                      Complete Registration
+                      {!uploadedFile ? 'Upload Document to Continue' : 'Complete Registration'}
                     </Button>
                   )}
                 </div>
@@ -1762,83 +1771,78 @@ function EWalletTab({ fieldErrors }) {
 function DocumentUploadTab({ uploadedFile, setUploadedFile, fieldErrors }) {
   const { setValue } = useFormContext();
   const [validationError, setValidationError] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
   const [uploadPreview, setUploadPreview] = useState(null);
+  const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
-    // Prevent any default form submission behavior
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const file = e.target.files[0];
+  // Handle file selection
+  const handleFileSelection = (file) => {
     setValidationError('');
     setUploadPreview(null);
     
-    if (file) {
-      // Validate file using the new utility
-      const validation = validateDocumentFile(file);
-      
-      if (!validation.isValid) {
-        setValidationError(validation.errors.join(', '));
-        setUploadedFile(null);
-        setValue('documentFileName', '', { shouldValidate: false });
-        // Clear the file input
-        e.target.value = '';
-        return false;
-      }
-      
-      // File is valid - set it and create preview
-      setUploadedFile(file);
-      setValue('documentFileName', file.name, { shouldValidate: false });
-      
-      // Create preview for images
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (event) => setUploadPreview(event.target.result);
-        reader.readAsDataURL(file);
-      }
-      
-      console.log('File successfully added:', file.name);
-    } else {
-      // No file selected or file was cleared
+    if (!file) {
       setUploadedFile(null);
       setValue('documentFileName', '', { shouldValidate: false });
+      return;
+    }
+
+    // Validate file using the new utility
+    const validation = validateDocumentFile(file);
+    
+    if (!validation.isValid) {
+      setValidationError(validation.errors.join(', '));
+      setUploadedFile(null);
+      setValue('documentFileName', '', { shouldValidate: false });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
     }
     
-    // Ensure we return false to prevent any form submission
-    return false;
+    // File is valid - set it and create preview
+    setUploadedFile(file);
+    setValue('documentFileName', file.name, { shouldValidate: false });
+    
+    // Create preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => setUploadPreview(event.target.result);
+      reader.readAsDataURL(file);
+    }
+    
+    console.log('File successfully selected:', file.name);
   };
 
-  const removeFile = (e) => {
+  // File input change handler
+  const handleFileInputChange = (e) => {
     e.preventDefault();
     e.stopPropagation();
     
+    const file = e.target.files?.[0] || null;
+    handleFileSelection(file);
+    
+    // Prevent any further event propagation
+    return false;
+  };
+
+  // Remove file handler
+  const handleRemoveFile = () => {
     setUploadedFile(null);
     setUploadPreview(null);
     setValue('documentFileName', '', { shouldValidate: false });
     setValidationError('');
     
-    // Reset the file input
-    const fileInput = document.getElementById('document-upload');
-    if (fileInput) fileInput.value = '';
-    
-    return false;
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
-  const openFileDialog = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const fileInput = document.getElementById('document-upload');
-    if (fileInput) {
-      fileInput.click();
+  // Open file dialog handler
+  const handleOpenFileDialog = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
-    
-    return false;
   };
 
   return (
-    <div className="space-y-6" onClick={(e) => e.stopPropagation()}>
+    <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold mb-2">Document Upload</h2>
         <p className="text-sm text-gray-400">
@@ -1852,20 +1856,20 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile, fieldErrors }) {
             <Upload className="mx-auto h-12 w-12 text-gray-400" />
             
             <div className="space-y-2">
-              <button
-                type="button"
-                onClick={openFileDialog}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              <div
+                onClick={handleOpenFileDialog}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer inline-block"
               >
                 Choose File
-              </button>
+              </div>
               
               <input
-                id="document-upload"
+                ref={fileInputRef}
                 type="file"
                 accept=".jpg,.jpeg,.pdf,.png"
-                onChange={handleFileChange}
+                onChange={handleFileInputChange}
                 className="hidden"
+                tabIndex={-1}
               />
               
               <p className="text-sm text-gray-400">
@@ -1898,20 +1902,18 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile, fieldErrors }) {
               <p className="text-sm text-gray-400">{formatFileSize(uploadedFile.size)}</p>
               
               <div className="flex justify-center gap-2 mt-4">
-                <button
-                  type="button"
-                  onClick={openFileDialog}
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
+                <div
+                  onClick={handleOpenFileDialog}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm cursor-pointer"
                 >
                   Change File
-                </button>
-                <button
-                  type="button"
-                  onClick={removeFile}
-                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                </div>
+                <div
+                  onClick={handleRemoveFile}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm cursor-pointer"
                 >
                   Remove File
-                </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1928,7 +1930,7 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile, fieldErrors }) {
         <div className="bg-green-900/20 border border-green-600 rounded-lg p-3">
           <div className="flex items-center space-x-2">
             <CheckCircle className="h-4 w-4 text-green-400" />
-            <span className="text-sm text-green-400">Document ready for upload</span>
+            <span className="text-sm text-green-400">Document ready for submission</span>
           </div>
         </div>
       )}
