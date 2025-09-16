@@ -760,7 +760,16 @@ function RegistrationFormPage() {
             </Button>
           </div>
         </div>            <FormProvider {...methods}>
-              <form onSubmit={handleSubmit(onSubmit)}>
+              <form 
+                onSubmit={handleSubmit(onSubmit)}
+                onKeyDown={(e) => {
+                  // Prevent form submission on Enter key except for the final submit button
+                  if (e.key === 'Enter' && e.target.type !== 'submit') {
+                    e.preventDefault();
+                    return false;
+                  }
+                }}
+              >
                 <motion.div
                   key={currentTab}
                   initial={{ opacity: 0, x: 20 }}
@@ -792,6 +801,7 @@ function RegistrationFormPage() {
                   {currentTab === 9 && <DocumentUploadTab 
                     uploadedFile={uploadedFile}
                     setUploadedFile={setUploadedFile}
+                    fieldErrors={fieldErrors}
                   />}
                 </motion.div>
 
@@ -1749,8 +1759,8 @@ function EWalletTab({ fieldErrors }) {
 }
 
 // Document Upload Tab
-function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
-  const { register, setValue } = useFormContext();
+function DocumentUploadTab({ uploadedFile, setUploadedFile, fieldErrors }) {
+  const { setValue } = useFormContext();
   const [validationError, setValidationError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadPreview, setUploadPreview] = useState(null);
@@ -1774,7 +1784,7 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
         setValue('documentFileName', '', { shouldValidate: false });
         // Clear the file input
         e.target.value = '';
-        return;
+        return false;
       }
       
       // File is valid - set it and create preview
@@ -1784,7 +1794,7 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
       // Create preview for images
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
-        reader.onload = (e) => setUploadPreview(e.target.result);
+        reader.onload = (event) => setUploadPreview(event.target.result);
         reader.readAsDataURL(file);
       }
       
@@ -1799,46 +1809,70 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
     return false;
   };
 
+  const removeFile = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setUploadedFile(null);
+    setUploadPreview(null);
+    setValue('documentFileName', '', { shouldValidate: false });
+    setValidationError('');
+    
+    // Reset the file input
+    const fileInput = document.getElementById('document-upload');
+    if (fileInput) fileInput.value = '';
+    
+    return false;
+  };
+
+  const openFileDialog = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const fileInput = document.getElementById('document-upload');
+    if (fileInput) {
+      fileInput.click();
+    }
+    
+    return false;
+  };
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold mb-4">Document Upload</h2>
-      <p className="text-sm text-gray-400 mb-4">
-        Upload a valid government-issued ID or birth certificate (PDF, JPG, PNG - max 10MB)
-      </p>
+    <div className="space-y-6" onClick={(e) => e.stopPropagation()}>
+      <div>
+        <h2 className="text-xl font-semibold mb-2">Document Upload</h2>
+        <p className="text-sm text-gray-400">
+          Upload a valid government-issued ID or birth certificate (PDF, JPG, PNG - max 10MB)
+        </p>
+      </div>
       
       <div className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center">
         {!uploadedFile ? (
-          <>
-            <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+          <div className="space-y-4">
+            <Upload className="mx-auto h-12 w-12 text-gray-400" />
             
             <div className="space-y-2">
               <button
                 type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  document.getElementById('document').click();
-                }}
-                className="text-blue-400 hover:text-blue-300 cursor-pointer focus:outline-none font-medium"
+                onClick={openFileDialog}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
-                Choose a file
+                Choose File
               </button>
+              
               <input
-                id="document"
+                id="document-upload"
                 type="file"
                 accept=".jpg,.jpeg,.pdf,.png"
                 onChange={handleFileChange}
                 className="hidden"
-                onClick={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-                onBlur={(e) => e.stopPropagation()}
               />
               
               <p className="text-sm text-gray-400">
                 PDF, JPG, PNG up to 10MB
               </p>
             </div>
-          </>
+          </div>
         ) : (
           <div className="space-y-4">
             {uploadPreview ? (
@@ -1859,64 +1893,45 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
               </div>
             )}
             
-            <div className="text-center">
+            <div className="text-center space-y-2">
               <p className="font-medium text-white">{uploadedFile.name}</p>
               <p className="text-sm text-gray-400">{formatFileSize(uploadedFile.size)}</p>
-            </div>
-            
-            <button
-              type="button"
-              onClick={() => {
-                setUploadedFile(null);
-                setUploadPreview(null);
-                setValue('documentFileName', '', { shouldValidate: false });
-              }}
-              className="text-red-400 hover:text-red-300 text-sm"
-            >
-              Remove file
-            </button>
-          </div>
-        )}
-        
-        {validationError && (
-          <div className="mt-4 p-3 bg-red-900/50 rounded-lg">
-            <p className="text-sm text-red-400">{validationError}</p>
-          </div>
-        )}
-        
-        {uploadedFile && !validationError && (
-          <div className="mt-4 p-4 bg-gray-700/50 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <FileText className="h-5 w-5 text-green-400" />
-                <div>
-                  <span className="text-sm text-green-400">{uploadedFile.name}</span>
-                  <p className="text-xs text-gray-400">
-                    {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
+              
+              <div className="flex justify-center gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={openFileDialog}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
+                >
+                  Change File
+                </button>
+                <button
+                  type="button"
+                  onClick={removeFile}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                >
+                  Remove File
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setUploadedFile(null);
-                  setValue('documentFileName', '', { shouldValidate: false });
-                  setValidationError('');
-                  // Reset the file input
-                  const fileInput = document.getElementById('document');
-                  if (fileInput) fileInput.value = '';
-                  return false;
-                }}
-                className="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded focus:outline-none"
-              >
-                Remove
-              </button>
             </div>
           </div>
         )}
       </div>
+      
+      {validationError && (
+        <div className="bg-red-900/50 border border-red-600 rounded-lg p-3">
+          <p className="text-sm text-red-400">{validationError}</p>
+        </div>
+      )}
+      
+      {uploadedFile && !validationError && (
+        <div className="bg-green-900/20 border border-green-600 rounded-lg p-3">
+          <div className="flex items-center space-x-2">
+            <CheckCircle className="h-4 w-4 text-green-400" />
+            <span className="text-sm text-green-400">Document ready for upload</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
