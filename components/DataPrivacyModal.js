@@ -13,14 +13,31 @@ const DataPrivacyModal = ({ isOpen, onAccept, onDecline }) => {
   useEffect(() => {
     setHasScrolledToEnd(false);
     setAcceptChecked(false);
+    
+    // Check if content needs scrolling when modal opens
+    if (isOpen) {
+      setTimeout(() => {
+        const container = scrollContainerRef.current;
+        if (container) {
+          const { scrollHeight, clientHeight } = container;
+          // If content fits without scrolling, mark as complete
+          if (scrollHeight <= clientHeight) {
+            setHasScrolledToEnd(true);
+          }
+        }
+      }, 200);
+    }
   }, [isOpen]);
 
   const handleScroll = () => {
     const container = scrollContainerRef.current;
-    if (container) {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px threshold
-      setHasScrolledToEnd(scrolledToBottom);
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const isAtBottom = Math.ceil(scrollTop + clientHeight) >= scrollHeight;
+    
+    if (isAtBottom) {
+      setHasScrolledToEnd(true);
     }
   };
 

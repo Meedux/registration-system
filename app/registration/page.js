@@ -141,6 +141,9 @@ function RegistrationFormPage() {
   });
 
   const { handleSubmit, formState: { errors, isValid }, watch, trigger, setValue, reset } = methods;
+  
+  // Watch form data for preview modal
+  const formData = watch();
 
   // Validate current tab when Next is clicked
   const validateCurrentTab = () => {
@@ -301,6 +304,50 @@ function RegistrationFormPage() {
     }
   }, [user?.uid, reset]);
 
+  // Load location data when draft is restored (for address dropdowns)
+  useEffect(() => {
+    const loadLocationDataForDraft = async () => {
+      const currentValues = watch();
+      
+      // Load cities for present region if exists
+      if (currentValues.presentRegion) {
+        try {
+          const cities = await getCitiesByRegion(currentValues.presentRegion);
+          setSelectedCities(cities);
+          
+          // Load barangays for present city if exists
+          if (currentValues.presentCity) {
+            const barangays = await getBarangaysByCity(currentValues.presentCity);
+            setSelectedBarangays(barangays);
+          }
+        } catch (error) {
+          console.error('Error loading present location data:', error);
+        }
+      }
+      
+      // Load cities for permanent region if exists and different from present
+      if (currentValues.permanentRegion && !currentValues.sameAsPresentAddress) {
+        try {
+          const permanentCities = await getCitiesByRegion(currentValues.permanentRegion);
+          setSelectedPermanentCities(permanentCities);
+          
+          // Load barangays for permanent city if exists
+          if (currentValues.permanentCity) {
+            const permanentBarangays = await getBarangaysByCity(currentValues.permanentCity);
+            setSelectedPermanentBarangays(permanentBarangays);
+          }
+        } catch (error) {
+          console.error('Error loading permanent location data:', error);
+        }
+      }
+    };
+    
+    // Only run after regions are loaded and form is reset (draft loaded)
+    if (regions.length > 0 && user?.uid) {
+      loadLocationDataForDraft();
+    }
+  }, [regions, user?.uid, watch]);
+
   // Simple validation - only runs when user clicks Next
   const [fieldErrors, setFieldErrors] = useState({});
   const [hasAttemptedNext, setHasAttemptedNext] = useState(false);
@@ -414,7 +461,8 @@ function RegistrationFormPage() {
   };
 
   // Handle same as present address toggle
-  const handleSameAddressToggle = (value) => {
+  const handleSameAddressToggle = (event) => {
+    const value = event.target.checked;
     setValue('sameAsPresentAddress', value);
     if (value) {
       const presentData = watch();
@@ -2139,18 +2187,6 @@ function RegistrationCompleteSuccess() {
           </CardContent>
         </Card>
       </motion.div>
-
-      {/* Preview Modal */}
-      {showPreview && (
-        <PreviewModal 
-          formData={formData}
-          onClose={() => setShowPreview(false)}
-          onSubmit={() => {
-            setShowPreview(false);
-            handleSubmit(onSubmit)();
-          }}
-        />
-      )}
     </div>
   );
 }
