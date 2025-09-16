@@ -770,6 +770,135 @@ function AdminDashboard() {
           </motion.div>
         )}
 
+        {/* Pending Approvals Tab */}
+        {activeTab === 'approvals' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6"
+          >
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold">Pending Approvals</h3>
+                <p className="text-gray-400">
+                  {users.filter(user => user.status === 'Pending Review' || user.status === 'pending' || !user.status).length} users waiting for approval
+                </p>
+              </div>
+              <div className="flex space-x-2">
+                <Button 
+                  onClick={() => fetchData()}
+                  variant="outline"
+                  className="flex items-center"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            {users.filter(user => user.status === 'Pending Review' || user.status === 'pending' || !user.status).length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-400" />
+                  <h3 className="text-lg font-semibold mb-2">No Pending Approvals</h3>
+                  <p className="text-gray-400">All registrations have been reviewed!</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <h4 className="text-lg font-semibold">Users Awaiting Approval</h4>
+                  <p className="text-gray-400">Review and approve or reject user registrations</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {users
+                      .filter(user => user.status === 'Pending Review' || user.status === 'pending' || !user.status)
+                      .map((user) => (
+                      <div key={user.id} className="border border-gray-700 rounded-lg p-4 bg-gray-800/50">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <User className="w-5 h-5 text-blue-500" />
+                              <div>
+                                <h5 className="font-semibold">
+                                  {user.firstName} {user.lastName}
+                                </h5>
+                                <p className="text-sm text-gray-400">
+                                  CID: {user.cid} • Registered: {formatDateTime(user.registrationCompletedAt || user.createdAt)}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3 text-sm">
+                              <div>
+                                <span className="text-gray-400">Email:</span>
+                                <p>{user.email}</p>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Phone:</span>
+                                <p>{user.phoneNumber}</p>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Birth Date:</span>
+                                <p>{user.birthDate}</p>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Address:</span>
+                                <p>{user.presentStreet}, {user.presentBarangay}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-4 text-sm">
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                user.emailVerified 
+                                  ? 'bg-green-900/30 text-green-300' 
+                                  : 'bg-red-900/30 text-red-300'
+                              }`}>
+                                {user.emailVerified ? 'Email Verified' : 'Email Not Verified'}
+                              </span>
+                              <span className="px-2 py-1 rounded-full text-xs bg-yellow-900/30 text-yellow-300">
+                                Pending Review
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col space-y-2 ml-4">
+                            <Button
+                              onClick={() => openApprovalModal(user, 'approved')}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Approve
+                            </Button>
+                            <Button
+                              onClick={() => openApprovalModal(user, 'rejected')}
+                              size="sm"
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              <XCircle className="w-4 h-4 mr-1" />
+                              Reject
+                            </Button>
+                            <Button
+                              onClick={() => viewUserDetails(user)}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Details
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </motion.div>
+        )}
+
         {/* Flagged Duplicates Tab */}
         {activeTab === 'duplicates' && (
           <motion.div

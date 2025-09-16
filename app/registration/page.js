@@ -216,6 +216,48 @@ function RegistrationFormPage() {
         if (!formData.eyeColor?.trim()) errors.eyeColor = 'Eye color is required';
         break;
         
+      case 3: // Sectoral Information
+        // Check if user has interacted with sectoral information (optional validation)
+        const sectoralFields = [
+          'pwdMember', 'pwdApply', 'soloParentMember', 'soloParentApply', 
+          'seniorMember', 'seniorApply', 'studentMember', 'studentApply',
+          'ipMember', 'ipApply', 'womenMember', 'womenApply',
+          'youthMember', 'youthApply', 'unemployedMember', 'unemployedApply',
+          'generalPublicMember', 'generalPublicApply'
+        ];
+        
+        const hasSectoralSelection = sectoralFields.some(field => formData[field]);
+        
+        // Only validate required IDs if user is already a member (no validation for section selection)
+        if (formData.pwdMember && !formData.pwdId?.trim()) {
+          errors.pwdId = 'PWD ID is required for members';
+        }
+        if (formData.soloParentMember && !formData.soloParentId?.trim()) {
+          errors.soloParentId = 'Solo Parent ID is required for members';
+        }
+        if (formData.seniorMember && !formData.seniorId?.trim()) {
+          errors.seniorId = 'Senior Citizen ID is required for members';
+        }
+        if (formData.studentMember && !formData.gradeLevel?.trim()) {
+          errors.gradeLevel = 'Grade/Year Level is required for student members';
+        }
+        break;
+        
+      case 4: // Livelihood Programs
+        // Optional validation - no requirement to select livelihood programs
+        // User can skip this section entirely if not applicable
+        break;
+        
+      case 5: // Social Benefits
+        // Optional validation - no requirement to select social benefits
+        // User can skip this section entirely if not applicable
+        break;
+        
+      case 6: // Local Government Benefits
+        // Optional validation - no requirement to select local government benefits
+        // User can skip this section entirely if not applicable
+        break;
+        
       // Other tabs don't have required validation
       default:
         break;
@@ -1513,6 +1555,7 @@ function SectoralInfoTab({ fieldErrors }) {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold mb-4">Sectoral Information</h2>
+      <p className="text-sm text-gray-400 mb-4">Select the sectoral groups that apply to you. This section is optional - you can skip it if none apply.</p>
       
       <div className="grid grid-cols-1 gap-6">
         {[
@@ -1554,6 +1597,7 @@ function SectoralInfoTab({ fieldErrors }) {
                 placeholder="Enter ID number"
                 className="mt-4"
                 required
+                error={fieldErrors[`${sector.id}Id`]}
               />
             )}
           </div>
@@ -1579,7 +1623,7 @@ function LivelihoodProgramsTab({ fieldErrors }) {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold mb-4">Livelihood Programs (Kabuhayan)</h2>
-      <p className="text-sm text-gray-400 mb-4">These are aimed at generating income or self-employment.</p>
+      <p className="text-sm text-gray-400 mb-4">These are aimed at generating income or self-employment. This section is optional - select only programs that interest you.</p>
       
       <div className="grid grid-cols-1 gap-4">
         {programs.map(program => (
@@ -1627,7 +1671,7 @@ function SocialBenefitsTab({ fieldErrors }) {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold mb-4">Social Benefits and Assistance Programs</h2>
-      <p className="text-sm text-gray-400 mb-4">These are cash or in-kind benefits for daily needs or emergencies.</p>
+      <p className="text-sm text-gray-400 mb-4">These are cash or in-kind benefits for daily needs or emergencies. This section is optional - select only programs that apply to you.</p>
       
       <div className="grid grid-cols-1 gap-4">
         {programs.map(program => (
@@ -1673,6 +1717,7 @@ function LocalGovBenefitsTab({ fieldErrors }) {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold mb-4">Local Government (Barangay/City/Municipality) Benefits</h2>
+      <p className="text-sm text-gray-400 mb-4">Benefits and services provided by local government units. This section is optional - select only programs that apply to you.</p>
       
       <div className="grid grid-cols-1 gap-4">
         {programs.map(program => (
