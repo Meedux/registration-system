@@ -12,14 +12,15 @@ import { Eye, EyeOff, UserPlus, ArrowLeft, Mail, CheckCircle } from 'lucide-reac
 import Link from 'next/link';
 import DataPrivacyModal from '@/components/DataPrivacyModal';
 
+// Simplified validation schema
 const registrationSchema = yup.object({
-  firstName: yup.string().required('First name is required'),
-  lastName: yup.string().required('Last name is required'),
-  email: yup.string().email('Invalid email').required('Email is required'),
-  password: yup.string().min(6, 'Password must be at least 6 characters').required('Password is required'),
+  firstName: yup.string().required('First name required'),
+  lastName: yup.string().required('Last name required'),
+  email: yup.string().email('Invalid email').required('Email required'),
+  password: yup.string().min(6, 'Min 6 characters').required('Password required'),
   confirmPassword: yup.string()
     .oneOf([yup.ref('password'), null], 'Passwords must match')
-    .required('Please confirm your password'),
+    .required('Confirm password'),
 });
 
 export default function RegisterPage() {
@@ -27,7 +28,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [registrationError, setRegistrationError] = useState('');
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [registrationData, setRegistrationData] = useState(null);
@@ -36,10 +37,28 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors }
+    watch,
+    formState: { errors: inputValidationErrors }
   } = useForm({
     resolver: yupResolver(registrationSchema)
   });
+
+  // Watch form values for reactive validation
+  const watchedValues = watch();
+  
+  // Helper function to check if a field is valid and filled
+  const isFieldValid = (fieldName) => {
+    const value = watchedValues[fieldName];
+    const hasError = inputValidationErrors[fieldName];
+    return value && value.trim() !== '' && !hasError;
+  };
+
+  // Helper function to check password match
+  const isPasswordMatching = () => {
+    const password = watchedValues.password;
+    const confirmPassword = watchedValues.confirmPassword;
+    return password && confirmPassword && password === confirmPassword && password.length >= 6;
+  };
 
   const onSubmit = async (data) => {
     if (!privacyAccepted) {
@@ -53,7 +72,7 @@ export default function RegisterPage() {
 
   const performRegistration = async (data) => {
     setIsLoading(true);
-    setError('');
+    setRegistrationError('');
     
     const userData = {
       firstName: data.firstName,
@@ -61,12 +80,12 @@ export default function RegisterPage() {
       email: data.email,
     };
 
-    const { success, error: registrationError } = await registerUser(data.email, data.password, userData);
+    const { success, error: registrationFailureMessage } = await registerUser(data.email, data.password, userData);
     
     if (success) {
       setRegistrationComplete(true);
     } else {
-      setError(registrationError);
+      setRegistrationError(registrationFailureMessage);
     }
     
     setIsLoading(false);
@@ -108,38 +127,80 @@ export default function RegisterPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {error && (
+            {registrationError && (
               <Alert variant="destructive" className="mb-4">
-                {error}
+                <strong>Registration Failed:</strong> {registrationError}
               </Alert>
             )}
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Input
-                  {...register('firstName')}
-                  label="First Name"
-                  placeholder="John"
-                  error={errors.firstName?.message}
-                  required
-                />
-                <Input
-                  {...register('lastName')}
-                  label="Last Name"
-                  placeholder="Doe"
-                  error={errors.lastName?.message}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    {...register('firstName')}
+                    label="First Name"
+                    placeholder="John"
+                    error={inputValidationErrors.firstName?.message}
+                    className={`transition-all duration-200 ${
+                      isFieldValid('firstName') 
+                        ? 'border-green-500 focus:border-green-400' 
+                        : inputValidationErrors.firstName 
+                          ? 'border-red-500' 
+                          : 'border-gray-600'
+                    }`}
+                    required
+                  />
+                  {isFieldValid('firstName') && (
+                    <div className="absolute right-3 top-9 text-green-500">
+                      <CheckCircle className="w-4 h-4" />
+                    </div>
+                  )}
+                </div>
+                <div className="relative">
+                  <Input
+                    {...register('lastName')}
+                    label="Last Name"
+                    placeholder="Doe"
+                    error={inputValidationErrors.lastName?.message}
+                    className={`transition-all duration-200 ${
+                      isFieldValid('lastName') 
+                        ? 'border-green-500 focus:border-green-400' 
+                        : inputValidationErrors.lastName 
+                          ? 'border-red-500' 
+                          : 'border-gray-600'
+                    }`}
+                    required
+                  />
+                  {isFieldValid('lastName') && (
+                    <div className="absolute right-3 top-9 text-green-500">
+                      <CheckCircle className="w-4 h-4" />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <Input
-                {...register('email')}
-                type="email"
-                label="Email Address"
-                placeholder="john.doe@example.com"
-                error={errors.email?.message}
-                required
-              />
+              <div className="relative">
+                <Input
+                  {...register('email')}
+                  type="email"
+                  label="Email Address"
+                  placeholder="john.doe@example.com"
+                  error={inputValidationErrors.email?.message}
+                  className={`transition-all duration-200 ${
+                    isFieldValid('email') 
+                      ? 'border-green-500 focus:border-green-400' 
+                      : inputValidationErrors.email 
+                        ? 'border-red-500' 
+                        : 'border-gray-600'
+                  }`}
+                  required
+                />
+                {isFieldValid('email') && (
+                  <div className="absolute right-3 top-9 text-green-500">
+                    <CheckCircle className="w-4 h-4" />
+                  </div>
+                )}
+              </div>
 
               <div className="relative">
                 <Input
@@ -147,9 +208,21 @@ export default function RegisterPage() {
                   type={showPassword ? 'text' : 'password'}
                   label="Password"
                   placeholder="Enter your password"
-                  error={errors.password?.message}
+                  error={inputValidationErrors.password?.message}
+                  className={`transition-all duration-200 ${
+                    isFieldValid('password') 
+                      ? 'border-green-500 focus:border-green-400' 
+                      : inputValidationErrors.password 
+                        ? 'border-red-500' 
+                        : 'border-gray-600'
+                  }`}
                   required
                 />
+                <div className="absolute right-10 top-9">
+                  {isFieldValid('password') && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -165,9 +238,21 @@ export default function RegisterPage() {
                   type={showConfirmPassword ? 'text' : 'password'}
                   label="Confirm Password"
                   placeholder="Confirm your password"
-                  error={errors.confirmPassword?.message}
+                  error={inputValidationErrors.confirmPassword?.message}
+                  className={`transition-all duration-200 ${
+                    isPasswordMatching() 
+                      ? 'border-green-500 focus:border-green-400' 
+                      : inputValidationErrors.confirmPassword 
+                        ? 'border-red-500' 
+                        : 'border-gray-600'
+                  }`}
                   required
                 />
+                <div className="absolute right-10 top-9">
+                  {isPasswordMatching() && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -177,9 +262,29 @@ export default function RegisterPage() {
                 </button>
               </div>
 
+              {/* Form validation status */}
+              <div className="flex items-center justify-center space-x-2 text-sm">
+                {isFieldValid('firstName') && isFieldValid('lastName') && 
+                 isFieldValid('email') && isPasswordMatching() ? (
+                  <div className="flex items-center text-green-500">
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    <span>All fields completed!</span>
+                  </div>
+                ) : (
+                  <div className="text-gray-400">
+                    Fill all required fields to continue
+                  </div>
+                )}
+              </div>
+
               <Button
                 type="submit"
-                className="w-full"
+                className={`w-full transition-all duration-200 ${
+                  isFieldValid('firstName') && isFieldValid('lastName') && 
+                  isFieldValid('email') && isPasswordMatching()
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : ''
+                }`}
                 loading={isLoading}
                 disabled={isLoading}
               >

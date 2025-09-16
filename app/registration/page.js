@@ -62,12 +62,11 @@ function RegistrationFormPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [autoSaving, setAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
-  const [validationErrors, setValidationErrors] = useState({});
   const [completedTabs, setCompletedTabs] = useState(new Set());
 
-  // Simplified - no validation schema, just basic form
+  // Form with no real-time validation - only validate on submit
   const methods = useForm({
-    mode: 'onChange',
+    mode: 'onSubmit', // Only validate when user submits
     defaultValues: {
       // Personal Information
       hasMiddleName: true,
@@ -141,19 +140,124 @@ function RegistrationFormPage() {
 
   const { handleSubmit, formState: { errors, isValid }, watch, trigger, setValue, reset } = methods;
 
-  // Enhanced validation for current tab
-  const [isCurrentTabValid, setIsCurrentTabValid] = useState(false);
+  // Validate current tab when Next is clicked
+  const validateCurrentTab = () => {
+    const formData = watch();
+    const errors = {};
+    
+    switch (currentTab) {
+      case 0: // Personal Information
+        if (!formData.firstName?.trim()) errors.firstName = 'First name is required';
+        if (!formData.lastName?.trim()) errors.lastName = 'Last name is required';
+        if (!formData.birthDate) errors.birthDate = 'Birth date is required';
+        if (!formData.placeOfBirth?.trim()) errors.placeOfBirth = 'Place of birth is required';
+        if (!formData.nationality?.trim()) errors.nationality = 'Nationality is required';
+        if (!formData.religion?.trim()) errors.religion = 'Religion is required';
+        if (!formData.gender?.trim()) errors.gender = 'Gender is required';
+        if (!formData.civilStatus?.trim()) errors.civilStatus = 'Civil status is required';
+        if (!formData.phoneNumber?.trim()) errors.phoneNumber = 'Phone number is required';
+        
+        // Middle name validation only if hasMiddleName is true
+        if (formData.hasMiddleName !== false && !formData.middleName?.trim()) {
+          errors.middleName = 'Middle name is required';
+        }
+        
+        // Phone number format validation
+        if (formData.phoneNumber && !/^09[0-9]{9}$/.test(formData.phoneNumber.replace(/[-\s]/g, ''))) {
+          errors.phoneNumber = 'Please enter a valid Philippine mobile number (09XXXXXXXXX)';
+        }
+        
+        // Birth date validation
+        if (formData.birthDate) {
+          const birthDate = new Date(formData.birthDate);
+          const today = new Date();
+          if (birthDate > today) {
+            errors.birthDate = 'Birth date cannot be in the future';
+          }
+        }
+        break;
+        
+      case 1: // Work Information
+        if (userAge >= 18 && formData.isEmployed) {
+          if (!formData.employmentType?.trim()) errors.employmentType = 'Employment type is required for employed individuals';
+          if (!formData.position?.trim()) errors.position = 'Position/job title is required';
+          if (!formData.companyName?.trim()) errors.companyName = 'Company name is required';
+        }
+        break;
+        
+      case 2: // Address Information
+        if (!formData.presentRegion?.trim()) errors.presentRegion = 'Region is required';
+        if (!formData.presentCity?.trim()) errors.presentCity = 'City is required';
+        if (!formData.presentBarangay?.trim()) errors.presentBarangay = 'Barangay is required';
+        if (!formData.presentStreet?.trim()) errors.presentStreet = 'Street address is required';
+        
+        // Permanent address validation if different from present
+        if (!formData.sameAsPresentAddress) {
+          if (!formData.permanentRegion?.trim()) errors.permanentRegion = 'Permanent region is required';
+          if (!formData.permanentCity?.trim()) errors.permanentCity = 'Permanent city is required';
+          if (!formData.permanentBarangay?.trim()) errors.permanentBarangay = 'Permanent barangay is required';
+          if (!formData.permanentStreet?.trim()) errors.permanentStreet = 'Permanent street address is required';
+        }
+        break;
+        
+      case 7: // Health Record
+        if (!formData.bloodType?.trim()) errors.bloodType = 'Blood type is required';
+        if (!formData.heightCm?.toString()?.trim() || formData.heightCm < 50 || formData.heightCm > 300) {
+          errors.heightCm = 'Please enter a valid height between 50-300 cm';
+        }
+        if (!formData.weightKg?.toString()?.trim() || formData.weightKg < 20 || formData.weightKg > 300) {
+          errors.weightKg = 'Please enter a valid weight between 20-300 kg';
+        }
+        if (!formData.eyeColor?.trim()) errors.eyeColor = 'Eye color is required';
+        break;
+        
+      // Other tabs don't have required validation
+      default:
+        break;
+    }
+    
+    setFieldErrors(errors);
+    const isValid = Object.keys(errors).length === 0;
+    
+    // Update completed tabs
+    if (isValid) {
+      setCompletedTabs(prev => new Set([...prev, currentTab]));
+    } else {
+      setCompletedTabs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentTab);
+        return newSet;
+      });
+    }
+    
+    return isValid;
+  };
   
+  // Auto-save functionality - saves every 30 seconds
+  const handleAutoSave = useCallback(() => {
+    if (!user?.uid) return;
+    
+    try {
+      const currentFormData = watch();
+      const formDataToSave = { 
+        ...currentFormData, 
+        lastAutoSavedAt: new Date().toISOString(),
+        isAutoSave: true 
+      };
+      localStorage.setItem(`registration_draft_${user.uid}`, JSON.stringify(formDataToSave));
+      setLastSaved(new Date());
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  }, [user?.uid, watch]);
+
   // Manual save functionality
   const handleSaveDraft = useCallback(async () => {
     if (!user?.uid) return;
     
     setAutoSaving(true);
     try {
-      const currentFormData = watch();
-      const formDataToSave = { ...currentFormData, lastSavedAt: new Date().toISOString(), isAutoSave: true };
-      localStorage.setItem(`registration_draft_${user.uid}`, JSON.stringify(formDataToSave));
-      setLastSaved(new Date());
+      handleAutoSave();
       setSuccess('Draft saved successfully.');
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
@@ -163,7 +267,18 @@ function RegistrationFormPage() {
     } finally {
       setAutoSaving(false);
     }
-  }, [user?.uid, watch]);
+  }, [handleAutoSave, user?.uid]);
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const interval = setInterval(() => {
+      handleAutoSave();
+    }, 30000); // Auto-save every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [handleAutoSave, user?.uid]);
 
   // Load saved draft on mount
   useEffect(() => {
@@ -184,144 +299,9 @@ function RegistrationFormPage() {
     }
   }, [user?.uid, reset]);
 
-  // Enhanced validation with detailed error messages
-  const validateCurrentTab = () => {
-    const errors = {};
-    let isValid = false;
-    
-    switch (currentTab) {
-      case 0: // Personal Information
-        if (!formData?.firstName?.trim()) errors.firstName = 'First name is required';
-        if (!formData?.lastName?.trim()) errors.lastName = 'Last name is required';
-        if (!formData?.birthDate) errors.birthDate = 'Birth date is required';
-        if (!formData?.placeOfBirth?.trim()) errors.placeOfBirth = 'Place of birth is required';
-        if (!formData?.nationality?.trim()) errors.nationality = 'Nationality is required';
-        if (!formData?.religion?.trim()) errors.religion = 'Religion is required';
-        if (!formData?.gender?.trim()) errors.gender = 'Gender is required';
-        if (!formData?.civilStatus?.trim()) errors.civilStatus = 'Civil status is required';
-        if (!formData?.phoneNumber?.trim()) errors.phoneNumber = 'Phone number is required';
-        if (formData?.hasMiddleName !== false && !formData?.middleName?.trim()) {
-          errors.middleName = 'Middle name is required';
-        }
-        
-        // Phone number format validation
-        if (formData?.phoneNumber && !/^09[0-9]{9}$/.test(formData.phoneNumber.replace(/[-\s]/g, ''))) {
-          errors.phoneNumber = 'Please enter a valid Philippine mobile number (09XXXXXXXXX)';
-        }
-        
-        // Age validation
-        if (formData?.birthDate) {
-          const age = new Date().getFullYear() - new Date(formData.birthDate).getFullYear();
-          if (age < 0) errors.birthDate = 'Birth date cannot be in the future';
-          if (age > 120) errors.birthDate = 'Please enter a valid birth date';
-        }
-        
-        isValid = Object.keys(errors).length === 0;
-        break;
-        
-      case 1: // Work Information  
-        if (userAge >= 18 && formData?.isEmployed) {
-          if (!formData?.employmentType?.trim()) errors.employmentType = 'Employment type is required';
-          if (!formData?.position?.trim()) errors.position = 'Position is required';
-          if (!formData?.companyName?.trim()) errors.companyName = 'Company name is required';
-        }
-        isValid = Object.keys(errors).length === 0;
-        break;
-        
-      case 2: // Address Information
-        if (!formData?.presentRegion?.trim()) errors.presentRegion = 'Region is required';
-        if (!formData?.presentCity?.trim()) errors.presentCity = 'City is required';
-        if (!formData?.presentBarangay?.trim()) errors.presentBarangay = 'Barangay is required';
-        if (!formData?.presentStreet?.trim()) errors.presentStreet = 'Street address is required';
-        
-        // Validate permanent address if different from present
-        if (!formData?.sameAsPresentAddress) {
-          if (!formData?.permanentRegion?.trim()) errors.permanentRegion = 'Permanent region is required';
-          if (!formData?.permanentCity?.trim()) errors.permanentCity = 'Permanent city is required';
-          if (!formData?.permanentBarangay?.trim()) errors.permanentBarangay = 'Permanent barangay is required';
-          if (!formData?.permanentStreet?.trim()) errors.permanentStreet = 'Permanent street address is required';
-        }
-        
-        isValid = Object.keys(errors).length === 0;
-        break;
-        
-      case 7: // Health Record
-        if (!formData?.bloodType?.trim()) errors.bloodType = 'Blood type is required';
-        if (!formData?.heightCm || formData.heightCm < 50 || formData.heightCm > 300) {
-          errors.heightCm = 'Please enter a valid height (50-300 cm)';
-        }
-        if (!formData?.weightKg || formData.weightKg < 20 || formData.weightKg > 300) {
-          errors.weightKg = 'Please enter a valid weight (20-300 kg)';
-        }
-        if (!formData?.hairColor?.trim()) errors.hairColor = 'Hair color is required';
-        if (!formData?.eyeColor?.trim()) errors.eyeColor = 'Eye color is required';
-        
-        isValid = Object.keys(errors).length === 0;
-        break;
-        
-      default:
-        isValid = true;
-        break;
-    }
-    
-    setValidationErrors(errors);
-    setIsCurrentTabValid(isValid);
-    
-    // Update completed tabs
-    if (isValid) {
-      setCompletedTabs(prev => new Set([...prev, currentTab]));
-    } else {
-      setCompletedTabs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(currentTab);
-        return newSet;
-      });
-    }
-    
-    return { isValid, errors };
-  };
-
-  // Validate current tab whenever currentTab changes
-  useEffect(() => {
-    const validateTab = () => {
-      const currentFormData = watch();
-      const errors = {};
-      let isValid = false;
-      
-      switch (currentTab) {
-        case 0: // Personal Information
-          if (!currentFormData?.firstName?.trim()) errors.firstName = 'First name is required';
-          if (!currentFormData?.lastName?.trim()) errors.lastName = 'Last name is required';
-          if (!currentFormData?.birthDate) errors.birthDate = 'Birth date is required';
-          if (!currentFormData?.placeOfBirth?.trim()) errors.placeOfBirth = 'Place of birth is required';
-          if (!currentFormData?.nationality?.trim()) errors.nationality = 'Nationality is required';
-          if (!currentFormData?.religion?.trim()) errors.religion = 'Religion is required';
-          if (!currentFormData?.gender?.trim()) errors.gender = 'Gender is required';
-          if (!currentFormData?.civilStatus?.trim()) errors.civilStatus = 'Civil status is required';
-          if (!currentFormData?.phoneNumber?.trim()) errors.phoneNumber = 'Phone number is required';
-          isValid = Object.keys(errors).length === 0;
-          break;
-        case 2: // Address Information
-          if (!currentFormData?.presentRegion?.trim()) errors.presentRegion = 'Region is required';
-          if (!currentFormData?.presentCity?.trim()) errors.presentCity = 'City is required';
-          if (!currentFormData?.presentBarangay?.trim()) errors.presentBarangay = 'Barangay is required';
-          isValid = Object.keys(errors).length === 0;
-          break;
-        default:
-          isValid = true;
-          break;
-      }
-      
-      setValidationErrors(errors);
-      setIsCurrentTabValid(isValid);
-      
-      if (isValid) {
-        setCompletedTabs(prev => new Set([...prev, currentTab]));
-      }
-    };
-
-    validateTab();
-  }, [currentTab, userAge, watch]);
+  // Simple validation - only runs when user clicks Next
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [hasAttemptedNext, setHasAttemptedNext] = useState(false);
 
   // Check user registration status on mount
   useEffect(() => {
@@ -460,8 +440,13 @@ function RegistrationFormPage() {
   const hasMiddleName = watch('hasMiddleName') ?? true;
 
   const nextTab = () => {
-    if (isCurrentTabValid && currentTab < tabs.length - 1) {
+    setHasAttemptedNext(true);
+    const isValid = validateCurrentTab();
+    
+    if (isValid && currentTab < tabs.length - 1) {
       setCurrentTab(currentTab + 1);
+      setHasAttemptedNext(false); // Reset for next tab
+      setFieldErrors({}); // Clear errors when moving to next tab
     }
   };
 
@@ -658,12 +643,16 @@ function RegistrationFormPage() {
                   const Icon = tab.icon;
                   const isActive = tab.id === currentTab;
                   const isCompleted = completedTabs.has(tab.id);
-                  const hasErrors = validationErrors && Object.keys(validationErrors).length > 0 && tab.id === currentTab;
+                  const hasErrors = hasAttemptedNext && Object.keys(fieldErrors).length > 0 && tab.id === currentTab;
                   
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setCurrentTab(tab.id)}
+                      onClick={() => {
+                        setCurrentTab(tab.id);
+                        setHasAttemptedNext(false); // Reset validation state when switching tabs
+                        setFieldErrors({}); // Clear errors when switching tabs
+                      }}
                       disabled={tab.id > currentTab && !isCompleted}
                       className={`flex flex-col items-center p-3 rounded-md text-xs font-medium transition-all ${
                         isActive
@@ -700,10 +689,10 @@ function RegistrationFormPage() {
                     <h3 className="font-medium text-white">{tabs[currentTab]?.title}</h3>
                     <p className="text-sm text-gray-400">Step {currentTab + 1} of {tabs.length}</p>
                   </div>
-                  {Object.keys(validationErrors).length > 0 && (
+                  {hasAttemptedNext && Object.keys(fieldErrors).length > 0 && (
                     <div className="flex items-center text-red-400 text-sm">
                       <AlertCircle className="w-4 h-4 mr-1" />
-                      {Object.keys(validationErrors).length} error(s)
+                      {Object.keys(fieldErrors).length} field(s) need attention
                     </div>
                   )}
                 </div>
@@ -775,8 +764,8 @@ function RegistrationFormPage() {
                   exit={{ opacity: 0, x: -20 }}
                   transition={{ duration: 0.3 }}
                 >
-                  {currentTab === 0 && <PersonalInfoTab hasMiddleName={hasMiddleName} userAge={userAge} />}
-                  {currentTab === 1 && <WorkInfoTab userAge={userAge} />}
+                  {currentTab === 0 && <PersonalInfoTab hasMiddleName={hasMiddleName} userAge={userAge} fieldErrors={fieldErrors} />}
+                  {currentTab === 1 && <WorkInfoTab userAge={userAge} fieldErrors={fieldErrors} />}
                   {currentTab === 2 && <AddressInfoTab 
                     regions={regions}
                     selectedCities={selectedCities}
@@ -788,13 +777,14 @@ function RegistrationFormPage() {
                     onSameAddressToggle={handleSameAddressToggle}
                     watch={watch}
                     loadingLocations={loadingLocations}
+                    fieldErrors={fieldErrors}
                   />}
-                  {currentTab === 3 && <SectoralInfoTab />}
-                  {currentTab === 4 && <LivelihoodProgramsTab />}
-                  {currentTab === 5 && <SocialBenefitsTab />}
-                  {currentTab === 6 && <LocalGovBenefitsTab />}
-                  {currentTab === 7 && <HealthRecordTab />}
-                  {currentTab === 8 && <EWalletTab />}
+                  {currentTab === 3 && <SectoralInfoTab fieldErrors={fieldErrors} />}
+                  {currentTab === 4 && <LivelihoodProgramsTab fieldErrors={fieldErrors} />}
+                  {currentTab === 5 && <SocialBenefitsTab fieldErrors={fieldErrors} />}
+                  {currentTab === 6 && <LocalGovBenefitsTab fieldErrors={fieldErrors} />}
+                  {currentTab === 7 && <HealthRecordTab fieldErrors={fieldErrors} />}
+                  {currentTab === 8 && <EWalletTab fieldErrors={fieldErrors} />}
                   {currentTab === 9 && <DocumentUploadTab 
                     uploadedFile={uploadedFile}
                     setUploadedFile={setUploadedFile}
@@ -822,14 +812,14 @@ function RegistrationFormPage() {
                     </div>
 
                     {/* Validation Status */}
-                    {!isCurrentTabValid && Object.keys(validationErrors).length > 0 && (
-                      <div className="flex items-center space-x-2 text-sm text-red-400">
+                    {hasAttemptedNext && Object.keys(fieldErrors).length > 0 && (
+                      <div className="flex items-center space-x-2 text-sm text-amber-400">
                         <AlertCircle className="w-4 h-4" />
-                        <span>Please fix errors to continue</span>
+                        <span>{Object.keys(fieldErrors).length} field(s) need attention</span>
                       </div>
                     )}
 
-                    {isCurrentTabValid && (
+                    {completedTabs.has(currentTab) && (
                       <div className="flex items-center space-x-2 text-sm text-green-400">
                         <CheckCircle2 className="w-4 h-4" />
                         <span>Section complete</span>
@@ -841,8 +831,6 @@ function RegistrationFormPage() {
                     <Button
                       type="button"
                       onClick={nextTab}
-                      disabled={!isCurrentTabValid}
-                      className={!isCurrentTabValid ? 'opacity-50 cursor-not-allowed' : ''}
                     >
                       Next
                       <ChevronRight className="w-4 h-4 ml-1" />
@@ -850,7 +838,6 @@ function RegistrationFormPage() {
                   ) : (
                     <Button
                       type="submit"
-                      disabled={!isCurrentTabValid}
                       loading={isLoading}
                     >
                       Complete Registration
@@ -867,7 +854,7 @@ function RegistrationFormPage() {
 }
 
 // Enhanced Tab Components based on requirements
-function PersonalInfoTab({ hasMiddleName, userAge }) {
+function PersonalInfoTab({ hasMiddleName, userAge, fieldErrors }) {
   const { register, setValue, watch } = useFormContext();
   const hasMiddleNameValue = watch('hasMiddleName') ?? true; // Default to true if undefined
 
@@ -881,6 +868,7 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
           label="First Name"
           placeholder="Juan"
           required
+          error={fieldErrors.firstName}
         />
         
         <div>
@@ -890,6 +878,7 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
             placeholder="Santos"
             disabled={!hasMiddleNameValue}
             required={hasMiddleNameValue}
+            error={fieldErrors.middleName}
           />
           <Checkbox
             checked={!hasMiddleNameValue}
@@ -913,9 +902,10 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
           label="Last Name"
           placeholder="Dela Cruz"
           required
+          error={fieldErrors.lastName}
         />
         
-        <Select {...register('extension')} label="Extension">
+        <Select {...register('extension')} label="Extension" error={fieldErrors.extension}>
           <option value="">Select extension</option>
           <option value="Sr.">Sr.</option>
           <option value="Jr.">Jr.</option>
@@ -929,6 +919,7 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
         {...register('maidenName')}
         label="Maiden Name (Last Name before Marriage)"
         placeholder="Previous family name (if applicable)"
+        error={fieldErrors.maidenName}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -937,6 +928,7 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
           type="date"
           label="Date of Birth"
           required
+          error={fieldErrors.birthDate}
         />
         
         <Input
@@ -944,11 +936,12 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
           label="Place of Birth"
           placeholder="City, Province"
           required
+          error={fieldErrors.placeOfBirth}
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Select {...register('nationality')} label="Nationality" required>
+        <Select {...register('nationality')} label="Nationality" required error={fieldErrors.nationality}>
           <option value="">Select nationality</option>
           <option value="Filipino">Filipino</option>
           <option value="American">American</option>
@@ -963,18 +956,19 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
           label="Religion"
           placeholder="Catholic, Protestant, Muslim, etc."
           required
+          error={fieldErrors.religion}
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Select {...register('gender')} label="Sex" required>
+        <Select {...register('gender')} label="Sex" required error={fieldErrors.gender}>
           <option value="">Select sex</option>
           <option value="Male">Male</option>
           <option value="Female">Female</option>
           <option value="Do Not Specify">Do Not Specify</option>
         </Select>
         
-        <Select {...register('civilStatus')} label="Civil Status" required>
+        <Select {...register('civilStatus')} label="Civil Status" required error={fieldErrors.civilStatus}>
           <option value="">Select status</option>
           <option value="Single">Single</option>
           <option value="Married">Married</option>
@@ -991,6 +985,7 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
           placeholder="09XX-XXX-XXXX"
           pattern="09[0-9]{2}-[0-9]{3}-[0-9]{4}"
           required
+          error={fieldErrors.phoneNumber}
         />
         
         <Input
@@ -998,6 +993,7 @@ function PersonalInfoTab({ hasMiddleName, userAge }) {
           type="email"
           label="Alternate Email Address"
           placeholder="alternate@email.com"
+          error={fieldErrors.alternateEmail}
         />
       </div>
 
@@ -1219,7 +1215,7 @@ function EmploymentTab() {
 }
 
 // Work Information Tab (required for 18+)
-function WorkInfoTab({ userAge }) {
+function WorkInfoTab({ userAge, fieldErrors }) {
   const { register, watch } = useFormContext();
   const isEmployed = watch('isEmployed') ?? false;
 
@@ -1251,7 +1247,7 @@ function WorkInfoTab({ userAge }) {
 
       {isEmployed && (
         <div className="space-y-4">
-          <Select {...register('employmentType')} label="Employment Type" required>
+          <Select {...register('employmentType')} label="Employment Type" required error={fieldErrors.employmentType}>
             <option value="">Select employment type</option>
             <option value="Part-time">Part-time</option>
             <option value="Full Time">Full Time</option>
@@ -1267,6 +1263,7 @@ function WorkInfoTab({ userAge }) {
               label="Position/Title"
               placeholder="Software Developer"
               required
+              error={fieldErrors.position}
             />
             
             <Input
@@ -1274,6 +1271,7 @@ function WorkInfoTab({ userAge }) {
               label="Company Name"
               placeholder="Company Inc."
               required
+              error={fieldErrors.companyName}
             />
           </div>
         </div>
@@ -1283,7 +1281,7 @@ function WorkInfoTab({ userAge }) {
 }
 
 // Address Information Tab with cascading dropdowns (Regions -> Cities -> Barangays)
-function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPermanentCities, selectedPermanentBarangays, onRegionChange, onCityChange, onSameAddressToggle, watch, loadingLocations }) {
+function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPermanentCities, selectedPermanentBarangays, onRegionChange, onCityChange, onSameAddressToggle, watch, loadingLocations, fieldErrors }) {
   const { register, setValue } = useFormContext();
   const sameAsPresentAddress = watch('sameAsPresentAddress') ?? true;
 
@@ -1302,6 +1300,7 @@ function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPe
             required
             onChange={(e) => onRegionChange(e, 'present')}
             disabled={loadingLocations}
+            error={fieldErrors.presentRegion}
           >
             <option value="">{loadingLocations ? 'Loading regions...' : 'Select region'}</option>
             {regions?.map((region, index) => (
@@ -1315,6 +1314,7 @@ function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPe
             required
             onChange={(e) => onCityChange(e, 'present')}
             disabled={!selectedCities?.length}
+            error={fieldErrors.presentCity}
           >
             <option value="">Select city</option>
             {selectedCities?.map((city, index) => (
@@ -1324,7 +1324,7 @@ function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPe
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select {...register('presentBarangay')} label="Barangay" required disabled={!selectedBarangays?.length}>
+          <Select {...register('presentBarangay')} label="Barangay" required disabled={!selectedBarangays?.length} error={fieldErrors.presentBarangay}>
             <option value="">Select barangay</option>
             {selectedBarangays?.map((barangay, index) => (
               <option key={`barangay-${barangay.code || index}`} value={barangay.code}>{barangay.name}</option>
@@ -1336,6 +1336,7 @@ function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPe
             label="Street Name, Village"
             placeholder="123 Main Street, Subdivision"
             required
+            error={fieldErrors.presentStreet}
           />
         </div>
 
@@ -1345,6 +1346,7 @@ function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPe
             label="House Number"
             placeholder="123-A"
             required
+            error={fieldErrors.presentHouseNumber}
           />
           
           <Input
@@ -1434,7 +1436,7 @@ function AddressInfoTab({ regions, selectedCities, selectedBarangays, selectedPe
 }
 
 // Sectoral Information Tab
-function SectoralInfoTab() {
+function SectoralInfoTab({ fieldErrors }) {
   const { register, watch } = useFormContext();
 
   return (
@@ -1491,7 +1493,7 @@ function SectoralInfoTab() {
 }
 
 // Livelihood Programs Tab
-function LivelihoodProgramsTab() {
+function LivelihoodProgramsTab({ fieldErrors }) {
   const { register } = useFormContext();
   
   const programs = [
@@ -1538,7 +1540,7 @@ function LivelihoodProgramsTab() {
 }
 
 // Social Benefits Tab
-function SocialBenefitsTab() {
+function SocialBenefitsTab({ fieldErrors }) {
   const { register } = useFormContext();
   
   const programs = [
@@ -1586,7 +1588,7 @@ function SocialBenefitsTab() {
 }
 
 // Local Government Benefits Tab
-function LocalGovBenefitsTab() {
+function LocalGovBenefitsTab({ fieldErrors }) {
   const { register } = useFormContext();
   
   const programs = [
@@ -1631,7 +1633,7 @@ function LocalGovBenefitsTab() {
 }
 
 // Health Record Tab
-function HealthRecordTab() {
+function HealthRecordTab({ fieldErrors }) {
   const { register } = useFormContext();
 
   return (
@@ -1639,7 +1641,7 @@ function HealthRecordTab() {
       <h2 className="text-xl font-semibold mb-4">Health Record</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Select {...register('bloodType')} label="Blood Type" required>
+        <Select {...register('bloodType')} label="Blood Type" required error={fieldErrors.bloodType}>
           <option value="">Select blood type</option>
           <option value="A+">A+</option>
           <option value="A-">A-</option>
@@ -1659,6 +1661,7 @@ function HealthRecordTab() {
           min="50"
           max="300"
           required
+          error={fieldErrors.heightCm}
         />
         
         <Input
@@ -1669,6 +1672,7 @@ function HealthRecordTab() {
           min="10"
           max="500"
           required
+          error={fieldErrors.weightKg}
         />
       </div>
 
@@ -1678,6 +1682,7 @@ function HealthRecordTab() {
           label="Hair Color"
           placeholder="Black, Brown, etc."
           required
+          error={fieldErrors.hairColor}
         />
         
         <Input
@@ -1685,6 +1690,7 @@ function HealthRecordTab() {
           label="Eye Color"
           placeholder="Brown, Black, etc."
           required
+          error={fieldErrors.eyeColor}
         />
       </div>
 
@@ -1710,7 +1716,7 @@ function HealthRecordTab() {
 }
 
 // eWallet Information Tab
-function EWalletTab() {
+function EWalletTab({ fieldErrors }) {
   const { register } = useFormContext();
 
   return (
