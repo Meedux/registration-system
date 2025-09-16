@@ -39,7 +39,11 @@ export default function LoginPage() {
     const { success, error: loginError, needsVerification } = await loginUser(data.email, data.password);
     
     if (success) {
-      router.push('/');
+      // Add a small delay to ensure cookies are set before navigation
+      setTimeout(() => {
+        // Force a hard refresh to ensure middleware picks up new cookies
+        window.location.href = '/';
+      }, 100);
     } else {
       // If user needs verification, redirect to verification page
       if (needsVerification) {

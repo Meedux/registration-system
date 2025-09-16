@@ -11,24 +11,30 @@ export default function withAuth(WrappedComponent, requireAdmin = false, prevent
 
     useEffect(() => {
       if (!loading) {
+        console.log('withAuth check:', { user: !!user, isEmailVerified, isAdmin, requireAdmin, preventAdmin });
+        
         if (!user) {
+          console.log('No user, redirecting to login');
           router.push('/auth/login');
           return;
         }
         
         if (!isEmailVerified) {
+          console.log('Email not verified, redirecting to verification');
           router.push(`/auth/verify-email?email=${encodeURIComponent(user.email)}`);
           return;
         }
         
         if (requireAdmin && !isAdmin) {
           // Non-admin trying to access admin page - redirect to home
+          console.log('Non-admin accessing admin page, redirecting to home');
           router.push('/');
           return;
         }
         
         if (preventAdmin && isAdmin) {
           // Admin trying to access user-only pages - redirect to admin
+          console.log('Admin accessing user page, redirecting to admin');
           router.push('/admin');
           return;
         }

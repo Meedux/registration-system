@@ -27,6 +27,7 @@ export function middleware(request) {
   const isAuthenticated = request.cookies.get('isAuthenticated')?.value === 'true';
 
   console.log(`Middleware - Path: ${pathname}, IsAdmin: ${isAdmin}, IsAuth: ${isAuthenticated}`);
+  console.log('All cookies:', Object.fromEntries(request.cookies.getAll().map(cookie => [cookie.name, cookie.value])));
 
   // Handle admin routes
   if (adminRoutes.some(route => pathname.startsWith(route))) {
@@ -54,6 +55,7 @@ export function middleware(request) {
       return NextResponse.redirect(new URL('/admin', request.url));
     }
     // Regular user accessing user route - allow
+    console.log('Allowing regular user access to user route');
     return NextResponse.next();
   }
 
