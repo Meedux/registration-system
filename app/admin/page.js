@@ -316,8 +316,11 @@ function AdminDashboard() {
   const registrationTrend = users.reduce((acc, user) => {
     if (user.createdAt) {
       const date = user.createdAt?.toDate?.() || new Date(user.createdAt);
-      const month = date.toISOString().substring(0, 7);
-      acc[month] = (acc[month] || 0) + 1;
+      // Check if date is valid before processing
+      if (!isNaN(date.getTime())) {
+        const month = date.toISOString().substring(0, 7);
+        acc[month] = (acc[month] || 0) + 1;
+      }
     }
     return acc;
   }, {});
@@ -325,10 +328,16 @@ function AdminDashboard() {
   const chartData = Object.keys(registrationTrend).length > 0 ? Object.entries(registrationTrend)
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-6)
-    .map(([month, count]) => ({
-      month: new Date(month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      registrations: count
-    })) : [{ month: 'No Data', registrations: 0 }];
+    .map(([month, count]) => {
+      const dateObj = new Date(month + '-01');
+      const formattedMonth = !isNaN(dateObj.getTime()) 
+        ? dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        : month;
+      return {
+        month: formattedMonth,
+        registrations: count
+      };
+    }) : [{ month: 'No Data', registrations: 0 }];
 
   const programData = surveyResponses.reduce((acc, response) => {
     Object.entries(response.selectedPrograms || {}).forEach(([category, programs]) => {
@@ -825,7 +834,7 @@ function AdminDashboard() {
                                   {user.firstName} {user.lastName}
                                 </h5>
                                 <p className="text-sm text-gray-400">
-                                  CID: {user.cid} • Registered: {formatDateTime(user.registrationCompletedAt || user.createdAt)}
+                                  CID: {user.cid} • Registered: {(user.registrationCompletedAt || user.createdAt) ? formatDateTime(user.registrationCompletedAt || user.createdAt) : 'N/A'}
                                 </p>
                               </div>
                             </div>
@@ -952,7 +961,7 @@ function AdminDashboard() {
                                   {duplicate.firstName} {duplicate.lastName}
                                 </h5>
                                 <p className="text-sm text-gray-400">
-                                  CID: {duplicate.cid} • Registered: {formatDateTime(duplicate.registrationCompletedAt)}
+                                  CID: {duplicate.cid} • Registered: {duplicate.registrationCompletedAt ? formatDateTime(duplicate.registrationCompletedAt) : 'N/A'}
                                 </p>
                               </div>
                             </div>
@@ -1104,127 +1113,6 @@ function AdminDashboard() {
           </motion.div>
         )}
 
-        {/* Pending Approvals Tab */}
-        {activeTab === 'approvals' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-6"
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Pending Approvals</h3>
-                <p className="text-gray-400">Users waiting for approval</p>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => {
-                    const pendingUsers = users.filter(u => u.status === 'pending' || !u.status);
-                    setSelectedUsers(pendingUsers.map(u => u.id));
-                  }}
-                  variant="outline" 
-                  size="sm"
-                  className="bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
-                >
-                  Select All Pending
-                </Button>
-                <Button onClick={fetchData} variant="outline" size="sm" className="bg-gray-800 border-gray-600 text-white hover:bg-gray-700">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {users.filter(user => user.status === 'pending' || !user.status).map((user) => (
-                <Card key={user.id} className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
-                          <span className="text-white font-medium text-lg">
-                            {user.firstName?.[0]}{user.lastName?.[0]}
-                          </span>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-white">{user.firstName} {user.lastName}</h4>
-                          <p className="text-sm text-gray-400">{user.email}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Clock className="w-4 h-4 text-yellow-400" />
-                        <span className="text-xs text-yellow-400">Pending</span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2 mb-4">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Registration:</span>
-                        <span className="text-gray-300">
-                          {formatDateTime(user.createdAt?.toDate?.() || user.createdAt)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Email Verified:</span>
-                        <span className={user.emailVerified ? 'text-green-400' : 'text-red-400'}>
-                          {user.emailVerified ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Profile Complete:</span>
-                        <span className={user.registrationCompleted ? 'text-green-400' : 'text-yellow-400'}>
-                          {user.registrationCompleted ? 'Yes' : 'Partial'}
-                        </span>
-                      </div>
-                      {user.phoneNumber && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Phone:</span>
-                          <span className="text-gray-300">{user.phoneNumber}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex space-x-2">
-                      <Button 
-                        onClick={() => openApprovalModal(user, 'approved')}
-                        size="sm" 
-                        className="flex-1 bg-green-600 hover:bg-green-700"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Approve
-                      </Button>
-                      <Button 
-                        onClick={() => openApprovalModal(user, 'rejected')}
-                        size="sm" 
-                        variant="outline"
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600"
-                      >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        Reject
-                      </Button>
-                      <Button 
-                        onClick={() => viewUserDetails(user)}
-                        size="sm" 
-                        variant="outline"
-                        className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {users.filter(user => user.status === 'pending' || !user.status).length === 0 && (
-              <div className="text-center py-12">
-                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">All Caught Up!</h3>
-                <p className="text-gray-400">No users are waiting for approval.</p>
-              </div>
-            )}
-          </motion.div>
-        )}
 
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
@@ -1675,7 +1563,12 @@ function UserDetailsModal({ user, onClose, onApprove }) {
                       </div>
                       <div>
                         <span className="text-gray-400">Age:</span>
-                        <p className="text-gray-300">{user.birthDate ? new Date().getFullYear() - new Date(user.birthDate).getFullYear() : 'N/A'} years</p>
+                        <p className="text-gray-300">
+                          {user.birthDate ? (() => {
+                            const birthYear = new Date(user.birthDate).getFullYear();
+                            return isNaN(birthYear) ? 'N/A' : `${new Date().getFullYear() - birthYear} years`;
+                          })() : 'N/A'}
+                        </p>
                       </div>
                     </div>
                     <div>
@@ -1723,7 +1616,7 @@ function UserDetailsModal({ user, onClose, onApprove }) {
                       <div>
                         <span className="text-gray-400">Submitted Date:</span>
                         <p className="text-gray-300">
-                          {formatDateTime(new Date(user.submittedAt))}
+                          {formatDateTime(user.submittedAt)}
                         </p>
                       </div>
                     )}
@@ -1927,7 +1820,7 @@ function UserDetailsModal({ user, onClose, onApprove }) {
                           <div>
                             <p className="font-medium text-white">{user.documentInfo.fileName}</p>
                             <p className="text-sm text-gray-400">
-                              Uploaded: {formatDateTime(new Date(user.documentInfo.uploadedAt))}
+                              Uploaded: {user.documentInfo.uploadedAt ? formatDateTime(user.documentInfo.uploadedAt) : 'N/A'}
                             </p>
                           </div>
                         </div>
