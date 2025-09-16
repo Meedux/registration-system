@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAdminUsers, getSurveyResponses, updateUserStatus, sendNotificationEmail, updateUserData, deleteUserRegistration } from '@/lib/firebaseAuth';
+import { getAdminUsers, getSurveyResponses, updateUserStatus, sendNotificationEmail, updateUserData, deleteUserRegistration, getFlaggedDuplicates, resolveDuplicateFlag, getDuplicateStatistics } from '@/lib/firebaseAuth';
 import { getDocumentFromFirestore } from '@/lib/firestoreStorage';
 import { exportToCSV, formatDateTime } from '@/lib/utils';
 import { Button, Card, CardHeader, CardContent, Alert } from '@/components/ui';
@@ -67,15 +67,22 @@ function AdminDashboard() {
   const [approvalNote, setApprovalNote] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [flaggedDuplicates, setFlaggedDuplicates] = useState([]);
+  const [duplicateStats, setDuplicateStats] = useState({ totalFlagged: 0, totalResolved: 0, pendingReview: 0 });
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [selectedDuplicate, setSelectedDuplicate] = useState(null);
+  const [duplicateAction, setDuplicateAction] = useState('');
 
   const fetchData = useCallback(async () => {
     setDataLoading(true);
     setError('');
 
     try {
-      const [usersResult, surveysResult] = await Promise.all([
+      const [usersResult, surveysResult, flaggedDuplicatesResult, duplicateStatsResult] = await Promise.all([
         getAdminUsers({ status: filterStatus }),
-        getSurveyResponses()
+        getSurveyResponses(),
+        getFlaggedDuplicates(),
+        getDuplicateStatistics()
       ]);
 
       if (usersResult.success) {
@@ -87,6 +94,9 @@ function AdminDashboard() {
       if (surveysResult.success) {
         setSurveyResponses(surveysResult.responses);
       }
+
+      setFlaggedDuplicates(flaggedDuplicatesResult);
+      setDuplicateStats(duplicateStatsResult);
     } catch (err) {
       setError('Failed to fetch data');
     } finally {
@@ -212,6 +222,34 @@ function AdminDashboard() {
     setShowUserModal(true);
   };
 
+  // Handler for resolving duplicate flags
+  const handleResolveDuplicate = async (userId, action, note = '') => {
+    try {
+      const result = await resolveDuplicateFlag(userId, action, note);
+      
+      if (result.success) {
+        fetchData(); // Refresh all data including flagged duplicates
+        setShowDuplicateModal(false);
+        setSuccess(`Duplicate flag resolved successfully - ${action}`);
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(`Failed to resolve duplicate flag: ${result.error}`);
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (err) {
+      setError('An error occurred while resolving duplicate flag.');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  // Handler for opening duplicate resolution modal
+  const openDuplicateModal = (duplicate, action) => {
+    setSelectedDuplicate(duplicate);
+    setDuplicateAction(action);
+    setApprovalNote('');
+    setShowDuplicateModal(true);
+  };
+
   const exportUsersData = () => {
     const exportData = users.map(user => ({
       'First Name': user.firstName || '',
@@ -313,6 +351,7 @@ function AdminDashboard() {
     { id: 'overview', title: 'Overview', icon: TrendingUp },
     { id: 'users', title: 'User Management', icon: Users },
     { id: 'approvals', title: 'Pending Approvals', icon: Clock },
+    { id: 'duplicates', title: 'Flagged Duplicates', icon: AlertTriangle },
     { id: 'surveys', title: 'Survey Responses', icon: ClipboardList },
     { id: 'analytics', title: 'Analytics', icon: BarChart },
     { id: 'settings', title: 'Settings', icon: Settings },
@@ -394,7 +433,7 @@ function AdminDashboard() {
             className="space-y-6"
           >
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
               <StatsCard
                 title="Total Users"
                 value={stats.totalUsers}
@@ -412,6 +451,12 @@ function AdminDashboard() {
                 value={`${stats.completedRegistrations}/${stats.totalUsers}`}
                 icon={FileSpreadsheet}
                 color="purple"
+              />
+              <StatsCard
+                title="Flagged Duplicates"
+                value={duplicateStats.pendingReview}
+                icon={AlertTriangle}
+                color="yellow"
               />
               <StatsCard
                 title="Survey Responses"
@@ -722,6 +767,152 @@ function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+          </motion.div>
+        )}
+
+        {/* Flagged Duplicates Tab */}
+        {activeTab === 'duplicates' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6"
+          >
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold">Flagged Duplicate Registrations</h3>
+                <p className="text-gray-400">
+                  {duplicateStats.pendingReview} pending review • {duplicateStats.totalResolved} resolved
+                </p>
+              </div>
+              <div className="flex space-x-2">
+                <Button 
+                  onClick={() => fetchData()}
+                  variant="outline"
+                  className="flex items-center"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+
+            {flaggedDuplicates.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-400" />
+                  <h3 className="text-lg font-semibold mb-2">No Flagged Duplicates</h3>
+                  <p className="text-gray-400">All registrations are clean! No duplicate entries detected.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <h4 className="text-lg font-semibold">Duplicate Detection Results</h4>
+                  <p className="text-gray-400">Review and resolve potential duplicate registrations</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {flaggedDuplicates.map((duplicate) => (
+                      <div key={duplicate.id} className="border border-gray-700 rounded-lg p-4 bg-gray-800/50">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                              <div>
+                                <h5 className="font-semibold">
+                                  {duplicate.firstName} {duplicate.lastName}
+                                </h5>
+                                <p className="text-sm text-gray-400">
+                                  CID: {duplicate.cid} • Registered: {formatDateTime(duplicate.registrationCompletedAt)}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3 text-sm">
+                              <div>
+                                <span className="text-gray-400">Email:</span>
+                                <p>{duplicate.email}</p>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Phone:</span>
+                                <p>{duplicate.phoneNumber}</p>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Birth Date:</span>
+                                <p>{duplicate.birthDate}</p>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Address:</span>
+                                <p>{duplicate.presentStreet}, {duplicate.presentBarangay}</p>
+                              </div>
+                            </div>
+
+                            <div className="mb-3">
+                              <span className="text-sm text-gray-400">Duplicate Reasons:</span>
+                              <div className="mt-1">
+                                {duplicate.duplicateReasons?.map((reason, index) => (
+                                  <span 
+                                    key={index}
+                                    className="inline-block bg-yellow-900/30 text-yellow-300 text-xs px-2 py-1 rounded mr-2 mb-1"
+                                  >
+                                    {reason}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {duplicate.potentialDuplicates && duplicate.potentialDuplicates.length > 0 && (
+                              <div className="text-sm">
+                                <span className="text-gray-400">Similar to:</span>
+                                <p className="text-blue-400">
+                                  {duplicate.potentialDuplicates.length} other registration(s)
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex flex-col space-y-2 ml-4">
+                            <Button
+                              onClick={() => openDuplicateModal(duplicate, 'approve')}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Approve
+                            </Button>
+                            <Button
+                              onClick={() => openDuplicateModal(duplicate, 'pending')}
+                              size="sm"
+                              variant="outline"
+                              className="border-gray-600"
+                            >
+                              <Clock className="w-4 h-4 mr-1" />
+                              To Review
+                            </Button>
+                            <Button
+                              onClick={() => openDuplicateModal(duplicate, 'reject')}
+                              size="sm"
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              <XCircle className="w-4 h-4 mr-1" />
+                              Reject
+                            </Button>
+                            <Button
+                              onClick={() => viewUserDetails(duplicate)}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Details
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </motion.div>
         )}
 
@@ -1166,6 +1357,21 @@ function AdminDashboard() {
           }}
         />
       )}
+
+      {/* Duplicate Resolution Modal */}
+      {showDuplicateModal && selectedDuplicate && (
+        <DuplicateResolutionModal 
+          duplicate={selectedDuplicate}
+          action={duplicateAction}
+          note={approvalNote}
+          onNoteChange={setApprovalNote}
+          onConfirm={() => handleResolveDuplicate(selectedDuplicate.id, duplicateAction, approvalNote)}
+          onClose={() => {
+            setShowDuplicateModal(false);
+            setApprovalNote('');
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1176,7 +1382,8 @@ function StatsCard({ title, value, icon: Icon, color }) {
     green: 'bg-green-600',
     purple: 'bg-purple-600',
     orange: 'bg-orange-600',
-    red: 'bg-red-600'
+    red: 'bg-red-600',
+    yellow: 'bg-yellow-600'
   };
 
   return (
@@ -1833,6 +2040,108 @@ function ApprovalModal({ user, action, note, onNoteChange, onConfirm, onClose })
             className={action === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
           >
             {action === 'approved' ? 'Approve' : 'Reject'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Duplicate Resolution Modal Component
+function DuplicateResolutionModal({ duplicate, action, note, onNoteChange, onConfirm, onClose }) {
+  const getActionConfig = () => {
+    switch (action) {
+      case 'approve':
+        return {
+          title: 'Approve Registration',
+          description: 'Mark this registration as legitimate and approve it',
+          buttonText: 'Approve',
+          buttonClass: 'bg-green-600 hover:bg-green-700',
+          icon: <CheckCircle className="w-6 h-6 text-white" />
+        };
+      case 'reject':
+        return {
+          title: 'Reject Registration',
+          description: 'Mark this registration as duplicate and reject it',
+          buttonText: 'Reject',
+          buttonClass: 'bg-red-600 hover:bg-red-700',
+          icon: <XCircle className="w-6 h-6 text-white" />
+        };
+      case 'pending':
+        return {
+          title: 'Move to Pending Review',
+          description: 'Remove duplicate flag and move to regular pending review',
+          buttonText: 'Move to Pending',
+          buttonClass: 'bg-blue-600 hover:bg-blue-700',
+          icon: <Clock className="w-6 h-6 text-white" />
+        };
+      default:
+        return {};
+    }
+  };
+
+  const config = getActionConfig();
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4">
+        <div className="flex items-center mb-4">
+          <div className={`p-2 rounded-full mr-3 ${config.buttonClass.split(' ')[0]}`}>
+            {config.icon}
+          </div>
+          <h3 className="text-lg font-semibold text-white">
+            {config.title}
+          </h3>
+        </div>
+
+        <div className="mb-4">
+          <p className="text-gray-300 mb-2">
+            {config.description} for{' '}
+            <span className="font-medium">{duplicate.firstName} {duplicate.lastName}</span>?
+          </p>
+          
+          <div className="bg-gray-700/50 p-3 rounded-lg text-sm">
+            <p><span className="text-gray-400">Email:</span> {duplicate.email}</p>
+            <p><span className="text-gray-400">Phone:</span> {duplicate.phoneNumber}</p>
+            <p><span className="text-gray-400">CID:</span> {duplicate.cid}</p>
+            <div className="mt-2">
+              <span className="text-gray-400">Flagged for:</span>
+              <div className="mt-1">
+                {duplicate.duplicateReasons?.map((reason, index) => (
+                  <span 
+                    key={index}
+                    className="inline-block bg-yellow-900/30 text-yellow-300 text-xs px-2 py-1 rounded mr-1 mb-1"
+                  >
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Resolution Note (Optional)
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => onNoteChange(e.target.value)}
+            placeholder={`Add a note about this resolution...`}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            rows={3}
+          />
+        </div>
+
+        <div className="flex justify-end space-x-3">
+          <Button onClick={onClose} variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">
+            Cancel
+          </Button>
+          <Button 
+            onClick={onConfirm}
+            className={config.buttonClass}
+          >
+            {config.buttonText}
           </Button>
         </div>
       </div>
