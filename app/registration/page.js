@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { useForm, FormProvider, useFormContext } from 'react-hook-form';
 import { useAuth } from '@/contexts/AuthContext';
-import { saveUserRegistration, uploadDocument, getUserRegistrationStatus } from '@/lib/firebaseAuth';
+import { saveUserRegistration, getUserRegistrationStatus } from '@/lib/firebaseAuth';
+import { uploadDocumentToBlob, validateDocumentFile, formatFileSize } from '@/lib/blobUpload';
 import { Button, Input, Select, Checkbox, Card, CardHeader, CardContent, Alert } from '@/components/ui';
 import { 
   User, 
@@ -490,12 +492,14 @@ function RegistrationFormPage() {
       let documentInfo = null;
       if (uploadedFile) {
         try {
-          const uploadResult = await uploadDocument(uploadedFile, user.uid);
+          const uploadResult = await uploadDocumentToBlob(uploadedFile, user.uid);
           if (uploadResult.success) {
             documentInfo = {
-              documentId: uploadResult.documentId,
-              fileName: uploadResult.fileName,
-              uploadedAt: new Date().toISOString()
+              url: uploadResult.url,
+              filename: uploadResult.filename,
+              size: uploadResult.size,
+              type: uploadResult.type,
+              uploadedAt: uploadResult.uploadedAt
             };
           } else {
             console.error('Document upload failed:', uploadResult.error);
@@ -1748,6 +1752,8 @@ function EWalletTab({ fieldErrors }) {
 function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
   const { register, setValue } = useFormContext();
   const [validationError, setValidationError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState(null);
 
   const handleFileChange = (e) => {
     // Prevent any default form submission behavior
@@ -1756,14 +1762,14 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
     
     const file = e.target.files[0];
     setValidationError('');
+    setUploadPreview(null);
     
     if (file) {
-      // Validate file
-      const maxSize = 1 * 1024 * 1024; // 1MB
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+      // Validate file using the new utility
+      const validation = validateDocumentFile(file);
       
-      if (file.size > maxSize) {
-        setValidationError('File size must be less than 1MB');
+      if (!validation.isValid) {
+        setValidationError(validation.errors.join(', '));
         setUploadedFile(null);
         setValue('documentFileName', '', { shouldValidate: false });
         // Clear the file input
@@ -1771,19 +1777,16 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
         return;
       }
       
-      if (!allowedTypes.includes(file.type)) {
-        setValidationError('Only JPG, PNG, and PDF files are allowed');
-        setUploadedFile(null);
-        setValue('documentFileName', '', { shouldValidate: false });
-        // Clear the file input
-        e.target.value = '';
-        return;
-      }
-      
-      // File is valid, set it
+      // File is valid - set it and create preview
       setUploadedFile(file);
-      // Don't store the file object in form data - just store the filename
       setValue('documentFileName', file.name, { shouldValidate: false });
+      
+      // Create preview for images
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => setUploadPreview(e.target.result);
+        reader.readAsDataURL(file);
+      }
       
       console.log('File successfully added:', file.name);
     } else {
@@ -1800,39 +1803,80 @@ function DocumentUploadTab({ uploadedFile, setUploadedFile }) {
     <div className="space-y-6">
       <h2 className="text-xl font-semibold mb-4">Document Upload</h2>
       <p className="text-sm text-gray-400 mb-4">
-        Upload a valid government-issued ID or birth certificate (JPG or PDF, max 1MB)
+        Upload a valid government-issued ID or birth certificate (PDF, JPG, PNG - max 10MB)
       </p>
       
       <div className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center">
-        <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-        
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              document.getElementById('document').click();
-            }}
-            className="text-blue-400 hover:text-blue-300 cursor-pointer focus:outline-none"
-          >
-            Choose a file
-          </button>
-          <input
-            id="document"
-            type="file"
-            accept=".jpg,.jpeg,.pdf,.png"
-            onChange={handleFileChange}
-            className="hidden"
-            onClick={(e) => e.stopPropagation()}
-            onFocus={(e) => e.stopPropagation()}
-            onBlur={(e) => e.stopPropagation()}
-          />
-          
-          <p className="text-sm text-gray-400">
-            JPG, PNG, PDF up to 1MB
-          </p>
-        </div>
+        {!uploadedFile ? (
+          <>
+            <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  document.getElementById('document').click();
+                }}
+                className="text-blue-400 hover:text-blue-300 cursor-pointer focus:outline-none font-medium"
+              >
+                Choose a file
+              </button>
+              <input
+                id="document"
+                type="file"
+                accept=".jpg,.jpeg,.pdf,.png"
+                onChange={handleFileChange}
+                className="hidden"
+                onClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
+                onBlur={(e) => e.stopPropagation()}
+              />
+              
+              <p className="text-sm text-gray-400">
+                PDF, JPG, PNG up to 10MB
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-4">
+            {uploadPreview ? (
+              <div className="flex justify-center">
+                <Image 
+                  src={uploadPreview} 
+                  alt="Document preview" 
+                  width={160}
+                  height={160}
+                  className="max-h-40 max-w-full rounded-lg border border-gray-600 object-contain"
+                />
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <div className="p-4 bg-gray-700 rounded-lg">
+                  <FileText className="w-12 h-12 text-gray-400 mx-auto" />
+                </div>
+              </div>
+            )}
+            
+            <div className="text-center">
+              <p className="font-medium text-white">{uploadedFile.name}</p>
+              <p className="text-sm text-gray-400">{formatFileSize(uploadedFile.size)}</p>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setUploadedFile(null);
+                setUploadPreview(null);
+                setValue('documentFileName', '', { shouldValidate: false });
+              }}
+              className="text-red-400 hover:text-red-300 text-sm"
+            >
+              Remove file
+            </button>
+          </div>
+        )}
         
         {validationError && (
           <div className="mt-4 p-3 bg-red-900/50 rounded-lg">
