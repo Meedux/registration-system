@@ -88,6 +88,7 @@ function AdminDashboard() {
     includeLocalGovBenefits: false,
     includeGovernmentBenefits: false,
   });
+  const [openDropdownUserId, setOpenDropdownUserId] = useState(null);
 
   const fetchData = useCallback(async () => {
     setDataLoading(true);
@@ -123,6 +124,17 @@ function AdminDashboard() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (openDropdownUserId && !e.target.closest('.relative')) {
+        setOpenDropdownUserId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openDropdownUserId]);
 
   // Handler for updating user status
   const handleStatusUpdate = async (userId, newStatus, note = '') => {
@@ -233,13 +245,115 @@ function AdminDashboard() {
   };
 
   // Open edit user modal
+  const normalizeDateInput = (d) => {
+    if (!d) return '';
+    const dateObj = d?.toDate?.() ? d.toDate() : new Date(d);
+    return isNaN(dateObj.getTime()) ? '' : dateObj.toISOString().slice(0,10);
+  };
+
   const openEditModal = (user) => {
     setSelectedUser(user);
     setEditFormData({
+      // Basic
+      cid: user.cid || '',
       firstName: user.firstName || '',
+      middleName: user.middleName || '',
+      hasMiddleName: user.hasMiddleName ?? true,
       lastName: user.lastName || '',
       email: user.email || '',
-      birthDate: user.birthDate || ''
+      phoneNumber: user.phoneNumber || '',
+      birthDate: normalizeDateInput(user.birthDate),
+      placeOfBirth: user.placeOfBirth || '',
+      nationality: user.nationality || '',
+      religion: user.religion || '',
+      gender: user.gender || '',
+      civilStatus: user.civilStatus || '',
+      educationalAttainment: user.educationalAttainment || '',
+      employmentStatus: user.employmentStatus || '',
+      employmentType: user.employmentType || '',
+      position: user.position || '',
+      companyName: user.companyName || '',
+      monthlyIncome: user.monthlyIncome || '',
+
+      // Present Address
+      presentRegion: user.presentRegion || '',
+      presentCity: user.presentCity || user.city || '',
+      presentBarangay: user.presentBarangay || user.barangay || '',
+      presentStreet: user.presentStreet || user.street || '',
+      presentHouseNumber: user.presentHouseNumber || '',
+      hoaName: user.hoaName || '',
+      isPresentPrimary: user.isPresentPrimary ?? false,
+
+      // Permanent Address
+      sameAsPresentAddress: user.sameAsPresentAddress ?? false,
+      permanentRegion: user.permanentRegion || '',
+      permanentCity: user.permanentCity || '',
+      permanentBarangay: user.permanentBarangay || '',
+      permanentStreet: user.permanentStreet || '',
+      permanentHouseNumber: user.permanentHouseNumber || '',
+
+      // Sectoral
+      pwdMember: user.pwdMember ?? false, pwdApply: user.pwdApply ?? false, pwdId: user.pwdId || '',
+      soloParentMember: user.soloParentMember ?? false, soloParentApply: user.soloParentApply ?? false, soloParentId: user.soloParentId || '',
+      seniorMember: user.seniorMember ?? false, seniorApply: user.seniorApply ?? false, seniorId: user.seniorId || '',
+      studentMember: user.studentMember ?? false, studentApply: user.studentApply ?? false, studentId: user.studentId || '',
+      ipMember: user.ipMember ?? false, ipApply: user.ipApply ?? false,
+      womenMember: user.womenMember ?? false, womenApply: user.womenApply ?? false,
+      youthMember: user.youthMember ?? false, youthApply: user.youthApply ?? false,
+      unemployedMember: user.unemployedMember ?? false, unemployedApply: user.unemployedApply ?? false,
+      generalPublicMember: user.generalPublicMember ?? false, generalPublicApply: user.generalPublicApply ?? false,
+
+      // Livelihood Programs
+      livelihood_dole_member: user.livelihood_dole_member ?? false,
+      livelihood_dole_apply: user.livelihood_dole_apply ?? false,
+      livelihood_dswd_member: user.livelihood_dswd_member ?? false,
+      livelihood_dswd_apply: user.livelihood_dswd_apply ?? false,
+      livelihood_tesda_member: user.livelihood_tesda_member ?? false,
+      livelihood_tesda_apply: user.livelihood_tesda_apply ?? false,
+      livelihood_da_member: user.livelihood_da_member ?? false,
+      livelihood_da_apply: user.livelihood_da_apply ?? false,
+      livelihood_dti_member: user.livelihood_dti_member ?? false,
+      livelihood_dti_apply: user.livelihood_dti_apply ?? false,
+      livelihood_owwa_member: user.livelihood_owwa_member ?? false,
+      livelihood_owwa_apply: user.livelihood_owwa_apply ?? false,
+
+      // Social Benefits
+      social_4ps_member: user.social_4ps_member ?? false,
+      social_4ps_apply: user.social_4ps_apply ?? false,
+      social_socialPension_member: user.social_socialPension_member ?? false,
+      social_socialPension_apply: user.social_socialPension_apply ?? false,
+      social_philhealth_member: user.social_philhealth_member ?? false,
+      social_philhealth_apply: user.social_philhealth_apply ?? false,
+      social_aics_member: user.social_aics_member ?? false,
+      social_aics_apply: user.social_aics_apply ?? false,
+      social_tupad_member: user.social_tupad_member ?? false,
+      social_tupad_apply: user.social_tupad_apply ?? false,
+      social_feeding_member: user.social_feeding_member ?? false,
+      social_feeding_apply: user.social_feeding_apply ?? false,
+      social_childWelfare_member: user.social_childWelfare_member ?? false,
+      social_childWelfare_apply: user.social_childWelfare_apply ?? false,
+
+      // Local Gov Benefits
+      local_scholarships_member: user.local_scholarships_member ?? false,
+      local_scholarships_apply: user.local_scholarships_apply ?? false,
+      local_cooperatives_member: user.local_cooperatives_member ?? false,
+      local_cooperatives_apply: user.local_cooperatives_apply ?? false,
+      local_feedingPrograms_member: user.local_feedingPrograms_member ?? false,
+      local_feedingPrograms_apply: user.local_feedingPrograms_apply ?? false,
+      local_livelihoodFairs_member: user.local_livelihoodFairs_member ?? false,
+      local_livelihoodFairs_apply: user.local_livelihoodFairs_apply ?? false,
+      local_housing_member: user.local_housing_member ?? false,
+      local_housing_apply: user.local_housing_apply ?? false,
+
+      // Government benefit summary
+      has4Ps: user.has4Ps ?? false,
+      hasSSSPension: user.hasSSSPension ?? false,
+      hasGSISPension: user.hasGSISPension ?? false,
+      hasSocialPension: user.hasSocialPension ?? false,
+
+      // Wallet
+      gcashNumber: user.gcashNumber || '',
+      paymayaNumber: user.paymayaNumber || '',
     });
     setShowEditModal(true);
   };
@@ -922,33 +1036,40 @@ function AdminDashboard() {
                                   <XCircle className="w-4 h-4" />
                                 </Button>
                               )}
-                              <div className="relative group">
-                                <Button size="sm" variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">
+                              <div className="relative">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                                  onClick={() => setOpenDropdownUserId(openDropdownUserId === user.id ? null : user.id)}
+                                >
                                   <MoreHorizontal className="w-4 h-4" />
                                 </Button>
-                                <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                                  <div className="py-1">
-                                    <button onClick={() => openEditModal(user)} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
-                                      <Edit3 className="w-4 h-4 mr-2" />
-                                      Edit User
-                                    </button>
-                                    <button onClick={() => openEmailModal(user)} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
-                                      <Send className="w-4 h-4 mr-2" />
-                                      Send Email
-                                    </button>
-                                    <button onClick={() => openSuspendModal(user)} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
-                                      <Ban className="w-4 h-4 mr-2" />
-                                      Suspend
-                                    </button>
-                                    <button 
-                                      onClick={() => handleDeleteUser(user.id)}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700"
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Delete
-                                    </button>
+                                {openDropdownUserId === user.id && (
+                                  <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-10">
+                                    <div className="py-1">
+                                      <button onClick={() => { openEditModal(user); setOpenDropdownUserId(null); }} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+                                        <Edit3 className="w-4 h-4 mr-2" />
+                                        Edit User
+                                      </button>
+                                      <button onClick={() => { openEmailModal(user); setOpenDropdownUserId(null); }} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+                                        <Send className="w-4 h-4 mr-2" />
+                                        Send Email
+                                      </button>
+                                      <button onClick={() => { openSuspendModal(user); setOpenDropdownUserId(null); }} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+                                        <Ban className="w-4 h-4 mr-2" />
+                                        Suspend
+                                      </button>
+                                      <button 
+                                        onClick={() => { handleDeleteUser(user.id); setOpenDropdownUserId(null); }}
+                                        className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700"
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -1622,27 +1743,241 @@ function AdminDashboard() {
       {/* Edit User Modal */}
       {showEditModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg mx-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><Edit3 className="w-5 h-5 mr-2"/>Edit User</h3>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">First Name</label>
-                <input value={editFormData.firstName} onChange={(e)=>setEditFormData({...editFormData, firstName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Last Name</label>
-                <input value={editFormData.lastName} onChange={(e)=>setEditFormData({...editFormData, lastName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Email</label>
-                <input type="email" value={editFormData.email} onChange={(e)=>setEditFormData({...editFormData, email:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Birth Date</label>
-                <input type="date" value={editFormData.birthDate} onChange={(e)=>setEditFormData({...editFormData, birthDate:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+
+            {/* Basic Info */}
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-2">Basic Information</h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">CID</label>
+                  <input value={editFormData.cid} onChange={(e)=>setEditFormData({...editFormData, cid:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">First Name</label>
+                  <input value={editFormData.firstName} onChange={(e)=>setEditFormData({...editFormData, firstName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Middle Name</label>
+                  <input value={editFormData.middleName} onChange={(e)=>setEditFormData({...editFormData, middleName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Last Name</label>
+                  <input value={editFormData.lastName} onChange={(e)=>setEditFormData({...editFormData, lastName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div className="md:col-span-2 flex items-center space-x-2">
+                  <input type="checkbox" checked={!!editFormData.hasMiddleName} onChange={(e)=>setEditFormData({...editFormData, hasMiddleName:e.target.checked})} />
+                  <span className="text-sm text-gray-300">Has Middle Name</span>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Birth Date</label>
+                  <input type="date" value={editFormData.birthDate} onChange={(e)=>setEditFormData({...editFormData, birthDate:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Gender</label>
+                  <input value={editFormData.gender} onChange={(e)=>setEditFormData({...editFormData, gender:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Civil Status</label>
+                  <input value={editFormData.civilStatus} onChange={(e)=>setEditFormData({...editFormData, civilStatus:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Phone</label>
+                  <input value={editFormData.phoneNumber} onChange={(e)=>setEditFormData({...editFormData, phoneNumber:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs text-gray-400 mb-1">Email</label>
+                  <input type="email" value={editFormData.email} onChange={(e)=>setEditFormData({...editFormData, email:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Nationality</label>
+                  <input value={editFormData.nationality} onChange={(e)=>setEditFormData({...editFormData, nationality:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Religion</label>
+                  <input value={editFormData.religion} onChange={(e)=>setEditFormData({...editFormData, religion:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Education</label>
+                  <input value={editFormData.educationalAttainment} onChange={(e)=>setEditFormData({...editFormData, educationalAttainment:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Employment Status</label>
+                  <input value={editFormData.employmentStatus} onChange={(e)=>setEditFormData({...editFormData, employmentStatus:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Employment Type</label>
+                  <input value={editFormData.employmentType} onChange={(e)=>setEditFormData({...editFormData, employmentType:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Position</label>
+                  <input value={editFormData.position} onChange={(e)=>setEditFormData({...editFormData, position:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Company</label>
+                  <input value={editFormData.companyName} onChange={(e)=>setEditFormData({...editFormData, companyName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Monthly Income</label>
+                  <input value={editFormData.monthlyIncome} onChange={(e)=>setEditFormData({...editFormData, monthlyIncome:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+                </div>
               </div>
             </div>
-            <div className="flex justify-end space-x-3">
+
+            {/* Address */}
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-2">Address</h4>
+              <div className="p-3 bg-gray-700/30 rounded mb-3">
+                <div className="font-medium text-gray-200 mb-2">Present Address</div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <input placeholder="Region" value={editFormData.presentRegion} onChange={(e)=>setEditFormData({...editFormData, presentRegion:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="City" value={editFormData.presentCity} onChange={(e)=>setEditFormData({...editFormData, presentCity:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="Barangay" value={editFormData.presentBarangay} onChange={(e)=>setEditFormData({...editFormData, presentBarangay:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="Street/Village" value={editFormData.presentStreet} onChange={(e)=>setEditFormData({...editFormData, presentStreet:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="House No." value={editFormData.presentHouseNumber} onChange={(e)=>setEditFormData({...editFormData, presentHouseNumber:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="HOA Name" value={editFormData.hoaName} onChange={(e)=>setEditFormData({...editFormData, hoaName:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm md:col-span-2" />
+                  <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData.isPresentPrimary} onChange={(e)=>setEditFormData({...editFormData, isPresentPrimary:e.target.checked})} /> <span>Primary Address</span></label>
+                </div>
+              </div>
+              <div className="p-3 bg-gray-700/30 rounded">
+                <div className="font-medium text-gray-200 mb-2">Permanent Address</div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <input placeholder="Region" value={editFormData.permanentRegion} onChange={(e)=>setEditFormData({...editFormData, permanentRegion:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="City" value={editFormData.permanentCity} onChange={(e)=>setEditFormData({...editFormData, permanentCity:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="Barangay" value={editFormData.permanentBarangay} onChange={(e)=>setEditFormData({...editFormData, permanentBarangay:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="Street/Village" value={editFormData.permanentStreet} onChange={(e)=>setEditFormData({...editFormData, permanentStreet:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                  <input placeholder="House No." value={editFormData.permanentHouseNumber} onChange={(e)=>setEditFormData({...editFormData, permanentHouseNumber:e.target.value})} className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                </div>
+              </div>
+            </div>
+
+            {/* Sectoral */}
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-2">Sectoral Information</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  { id: 'pwd', label: 'PWD', needsId: true },
+                  { id: 'soloParent', label: 'Solo Parent', needsId: true },
+                  { id: 'senior', label: 'Senior', needsId: true },
+                  { id: 'student', label: 'Student', needsId: true },
+                  { id: 'ip', label: 'Indigenous People' },
+                  { id: 'women', label: 'Women' },
+                  { id: 'youth', label: 'Youth' },
+                  { id: 'unemployed', label: 'Unemployed' },
+                  { id: 'generalPublic', label: 'General Public' },
+                ].map(s => (
+                  <div key={s.id} className="p-3 bg-gray-700/30 rounded">
+                    <div className="font-medium text-gray-200 mb-2">{s.label}</div>
+                    <div className="flex items-center space-x-4 mb-2">
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`${s.id}Member`]} onChange={(e)=>setEditFormData({...editFormData, [`${s.id}Member`]: e.target.checked})} /> <span>Member</span></label>
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`${s.id}Apply`]} onChange={(e)=>setEditFormData({...editFormData, [`${s.id}Apply`]: e.target.checked})} /> <span>Apply</span></label>
+                    </div>
+                    {s.needsId && editFormData[`${s.id}Member`] && (
+                      <input placeholder="ID Number" value={editFormData[`${s.id}Id`] || ''} onChange={(e)=>setEditFormData({...editFormData, [`${s.id}Id`]: e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Livelihood */}
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-2">Livelihood Programs</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  { id: 'dole', label: 'DOLE' },
+                  { id: 'dswd', label: 'DSWD' },
+                  { id: 'tesda', label: 'TESDA' },
+                  { id: 'da', label: 'DA' },
+                  { id: 'dti', label: 'DTI' },
+                  { id: 'owwa', label: 'OWWA' },
+                ].map(p => (
+                  <div key={p.id} className="p-3 bg-gray-700/30 rounded">
+                    <div className="font-medium text-gray-200 mb-2">{p.label}</div>
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`livelihood_${p.id}_member`]} onChange={(e)=>setEditFormData({...editFormData, [`livelihood_${p.id}_member`]: e.target.checked})} /> <span>Member</span></label>
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`livelihood_${p.id}_apply`]} onChange={(e)=>setEditFormData({...editFormData, [`livelihood_${p.id}_apply`]: e.target.checked})} /> <span>Apply</span></label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Social & Local Benefits */}
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-2">Social Benefits</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                {[
+                  { id: '4ps', label: '4Ps' },
+                  { id: 'socialPension', label: 'Social Pension' },
+                  { id: 'philhealth', label: 'PhilHealth' },
+                  { id: 'aics', label: 'AICS' },
+                  { id: 'tupad', label: 'TUPAD' },
+                  { id: 'feeding', label: 'Feeding' },
+                  { id: 'childWelfare', label: 'Child/Women Welfare' },
+                ].map(p => (
+                  <div key={p.id} className="p-3 bg-gray-700/30 rounded">
+                    <div className="font-medium text-gray-200 mb-2">{p.label}</div>
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`social_${p.id}_member`]} onChange={(e)=>setEditFormData({...editFormData, [`social_${p.id}_member`]: e.target.checked})} /> <span>Member</span></label>
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`social_${p.id}_apply`]} onChange={(e)=>setEditFormData({...editFormData, [`social_${p.id}_apply`]: e.target.checked})} /> <span>Apply</span></label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <h4 className="text-white font-medium mb-2">Local Government Benefits</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  { id: 'scholarships', label: 'Scholarships' },
+                  { id: 'cooperatives', label: 'Cooperatives/Loans' },
+                  { id: 'feedingPrograms', label: 'Feeding/Clinics' },
+                  { id: 'livelihoodFairs', label: 'Livelihood Fairs' },
+                  { id: 'housing', label: 'Housing' },
+                ].map(p => (
+                  <div key={p.id} className="p-3 bg-gray-700/30 rounded">
+                    <div className="font-medium text-gray-200 mb-2">{p.label}</div>
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`local_${p.id}_member`]} onChange={(e)=>setEditFormData({...editFormData, [`local_${p.id}_member`]: e.target.checked})} /> <span>Member</span></label>
+                      <label className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" checked={!!editFormData[`local_${p.id}_apply`]} onChange={(e)=>setEditFormData({...editFormData, [`local_${p.id}_apply`]: e.target.checked})} /> <span>Apply</span></label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Gov Benefits & Wallet */}
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-2">Government Pensions/Benefits</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                {[
+                  { key: 'has4Ps', label: '4Ps Program' },
+                  { key: 'hasSSSPension', label: 'SSS Pension' },
+                  { key: 'hasGSISPension', label: 'GSIS Pension' },
+                  { key: 'hasSocialPension', label: 'Social Pension' },
+                ].map(g => (
+                  <label key={g.key} className="flex items-center space-x-2 text-sm text-gray-300 bg-gray-700/30 px-3 py-2 rounded">
+                    <input type="checkbox" checked={!!editFormData[g.key]} onChange={(e)=>setEditFormData({...editFormData, [g.key]: e.target.checked})} />
+                    <span>{g.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <h4 className="text-white font-medium mb-2">E-Wallet</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">GCash Number</label>
+                  <input value={editFormData.gcashNumber} onChange={(e)=>setEditFormData({...editFormData, gcashNumber:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">PayMaya Number</label>
+                  <input value={editFormData.paymayaNumber} onChange={(e)=>setEditFormData({...editFormData, paymayaNumber:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 sticky bottom-0 bg-gray-800 pt-3">
               <Button onClick={()=>{setShowEditModal(false);}} variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">Cancel</Button>
               <Button onClick={handleEditSave} className="bg-blue-600 hover:bg-blue-700">Save Changes</Button>
             </div>
