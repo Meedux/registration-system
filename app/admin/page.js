@@ -72,6 +72,22 @@ function AdminDashboard() {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [selectedDuplicate, setSelectedDuplicate] = useState(null);
   const [duplicateAction, setDuplicateAction] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({ firstName: '', lastName: '', email: '', birthDate: '' });
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('Admin Notification');
+  const [emailBody, setEmailBody] = useState('');
+  const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [suspendNote, setSuspendNote] = useState('');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    includeBasic: true,
+    includeSectoral: false,
+    includeLivelihood: false,
+    includeSocialBenefits: false,
+    includeLocalGovBenefits: false,
+    includeGovernmentBenefits: false,
+  });
 
   const fetchData = useCallback(async () => {
     setDataLoading(true);
@@ -216,6 +232,92 @@ function AdminDashboard() {
     setShowApprovalModal(true);
   };
 
+  // Open edit user modal
+  const openEditModal = (user) => {
+    setSelectedUser(user);
+    setEditFormData({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      email: user.email || '',
+      birthDate: user.birthDate || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!selectedUser) return;
+    try {
+      const result = await updateUserData(selectedUser.id, editFormData);
+      if (result.success) {
+        setShowEditModal(false);
+        fetchData();
+        setSuccess('User updated successfully');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(result.error || 'Failed to update user');
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (err) {
+      setError('An error occurred while updating user');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  // Open email modal
+  const openEmailModal = (user) => {
+    setSelectedUser(user);
+    setEmailSubject('Admin Notification');
+    setEmailBody('');
+    setShowEmailModal(true);
+  };
+
+  const handleSendEmail = async () => {
+    if (!selectedUser) return;
+    try {
+      // Reuse notification email function (status used here as subject category)
+      const result = await sendNotificationEmail(selectedUser.email, emailSubject, selectedUser.cid, emailBody);
+      if (result.success) {
+        setShowEmailModal(false);
+        setSuccess('Email queued successfully');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(result.error || 'Failed to send email');
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (err) {
+      setError('An error occurred while sending email');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  // Open suspend modal
+  const openSuspendModal = (user) => {
+    setSelectedUser(user);
+    setSuspendNote('');
+    setShowSuspendModal(true);
+  };
+
+  const handleConfirmSuspend = async () => {
+    if (!selectedUser) return;
+    try {
+      const result = await updateUserStatus(selectedUser.id, 'Suspended', suspendNote);
+      if (result.success) {
+        // Optional: send notification
+        await sendNotificationEmail(selectedUser.email, 'Suspended', selectedUser.cid, suspendNote);
+        setShowSuspendModal(false);
+        fetchData();
+        setSuccess('User suspended successfully');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(result.error || 'Failed to suspend user');
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (err) {
+      setError('An error occurred while suspending user');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
   // Handler for viewing user details
   const viewUserDetails = (user) => {
     setSelectedUser(user);
@@ -250,22 +352,109 @@ function AdminDashboard() {
     setShowDuplicateModal(true);
   };
 
-  const exportUsersData = () => {
-    const exportData = users.map(user => ({
-      'First Name': user.firstName || '',
-      'Last Name': user.lastName || '',
-      'Email': user.email || '',
-      'Phone': user.phoneNumber || '',
-      'Registration Date': formatDateTime(user.createdAt?.toDate?.() || user.createdAt),
-      'Email Verified': user.emailVerified ? 'Yes' : 'No',
-      'Registration Complete': user.registrationCompleted ? 'Yes' : 'No',
-      'Address': `${user.street || ''}, ${user.city || ''}, ${user.province || ''}`.replace(/^, |, $/g, ''),
-      'Education': user.educationalAttainment || '',
-      'Employment Status': user.employmentStatus || '',
-      'Monthly Income': user.monthlyIncome || ''
-    }));
+  const buildExportRow = (user, opts) => {
+    const row = {};
+    if (opts.includeBasic) {
+      row['CID'] = user.cid || '';
+      row['First Name'] = user.firstName || '';
+      row['Last Name'] = user.lastName || '';
+      row['Email'] = user.email || '';
+      row['Phone'] = user.phoneNumber || '';
+      row['Status'] = user.status || '';
+      row['Registration Date'] = formatDateTime(user.createdAt?.toDate?.() || user.createdAt);
+      row['Email Verified'] = user.emailVerified ? 'Yes' : 'No';
+      row['Registration Complete'] = user.registrationCompleted ? 'Yes' : 'No';
+      row['Address'] = `${user.presentStreet || user.street || ''}, ${user.presentBarangay || user.barangay || ''}, ${user.presentCity || user.city || ''}`.replace(/^, |, $/g, '');
+      row['Education'] = user.educationalAttainment || '';
+      row['Employment Status'] = user.employmentStatus || '';
+      row['Monthly Income'] = user.monthlyIncome || '';
+    }
 
+    if (opts.includeSectoral) {
+      const sectoral = [
+        { id: 'pwd', label: 'PWD', needsId: true },
+        { id: 'soloParent', label: 'Solo Parent', needsId: true },
+        { id: 'senior', label: 'Senior', needsId: true },
+        { id: 'student', label: 'Student', needsId: true },
+        { id: 'ip', label: 'Indigenous People', needsId: false },
+        { id: 'women', label: 'Women', needsId: false },
+        { id: 'youth', label: 'Youth', needsId: false },
+        { id: 'unemployed', label: 'Unemployed', needsId: false },
+        { id: 'generalPublic', label: 'General Public', needsId: false },
+      ];
+      sectoral.forEach(s => {
+        row[`Sectoral - ${s.label} Member`] = user[`${s.id}Member`] ? 'Yes' : 'No';
+        row[`Sectoral - ${s.label} Apply`] = user[`${s.id}Apply`] ? 'Yes' : 'No';
+        if (s.needsId) {
+          row[`Sectoral - ${s.label} ID`] = user[`${s.id}Id`] || '';
+        }
+      });
+    }
+
+    if (opts.includeLivelihood) {
+      const programs = [
+        { id: 'dole', label: 'DOLE' },
+        { id: 'dswd', label: 'DSWD' },
+        { id: 'tesda', label: 'TESDA' },
+        { id: 'da', label: 'DA' },
+        { id: 'dti', label: 'DTI' },
+        { id: 'owwa', label: 'OWWA' },
+      ];
+      programs.forEach(p => {
+        row[`Livelihood - ${p.label} Member`] = user[`livelihood_${p.id}_member`] ? 'Yes' : 'No';
+        row[`Livelihood - ${p.label} Apply`] = user[`livelihood_${p.id}_apply`] ? 'Yes' : 'No';
+      });
+    }
+
+    if (opts.includeSocialBenefits) {
+      const programs = [
+        { id: '4ps', label: '4Ps' },
+        { id: 'socialPension', label: 'Social Pension' },
+        { id: 'philhealth', label: 'PhilHealth' },
+        { id: 'aics', label: 'AICS' },
+        { id: 'tupad', label: 'TUPAD' },
+        { id: 'feeding', label: 'Feeding' },
+        { id: 'childWelfare', label: 'Child/Women Welfare' },
+      ];
+      programs.forEach(p => {
+        row[`Social - ${p.label} Member`] = user[`social_${p.id}_member`] ? 'Yes' : 'No';
+        row[`Social - ${p.label} Apply`] = user[`social_${p.id}_apply`] ? 'Yes' : 'No';
+      });
+    }
+
+    if (opts.includeLocalGovBenefits) {
+      const programs = [
+        { id: 'scholarships', label: 'Scholarships' },
+        { id: 'cooperatives', label: 'Cooperatives/Loans' },
+        { id: 'feedingPrograms', label: 'Feeding/Clinics' },
+        { id: 'livelihoodFairs', label: 'Livelihood Fairs' },
+        { id: 'housing', label: 'Housing' },
+      ];
+      programs.forEach(p => {
+        row[`Local - ${p.label} Member`] = user[`local_${p.id}_member`] ? 'Yes' : 'No';
+        row[`Local - ${p.label} Apply`] = user[`local_${p.id}_apply`] ? 'Yes' : 'No';
+      });
+    }
+
+    if (opts.includeGovernmentBenefits) {
+      const gov = [
+        { key: 'has4Ps', label: '4Ps Program' },
+        { key: 'hasSSSPension', label: 'SSS Pension' },
+        { key: 'hasGSISPension', label: 'GSIS Pension' },
+        { key: 'hasSocialPension', label: 'Social Pension' },
+      ];
+      gov.forEach(g => {
+        row[`Gov Benefit - ${g.label}`] = user[g.key] ? 'Yes' : 'No';
+      });
+    }
+
+    return row;
+  };
+
+  const exportUsersData = () => {
+    const exportData = users.map(u => buildExportRow(u, exportOptions));
     exportToCSV(exportData, `users-export-${new Date().toISOString().split('T')[0]}`);
+    setShowExportModal(false);
   };
 
   const exportSurveyData = () => {
@@ -593,7 +782,7 @@ function AdminDashboard() {
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Refresh
                 </Button>
-                <Button onClick={exportUsersData} className="flex items-center">
+                <Button onClick={() => setShowExportModal(true)} className="flex items-center">
                   <Download className="w-4 h-4 mr-2" />
                   Export
                 </Button>
@@ -739,15 +928,15 @@ function AdminDashboard() {
                                 </Button>
                                 <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                                   <div className="py-1">
-                                    <button className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+                                    <button onClick={() => openEditModal(user)} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
                                       <Edit3 className="w-4 h-4 mr-2" />
                                       Edit User
                                     </button>
-                                    <button className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+                                    <button onClick={() => openEmailModal(user)} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
                                       <Send className="w-4 h-4 mr-2" />
                                       Send Email
                                     </button>
-                                    <button className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
+                                    <button onClick={() => openSuspendModal(user)} className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
                                       <Ban className="w-4 h-4 mr-2" />
                                       Suspend
                                     </button>
@@ -1388,6 +1577,122 @@ function AdminDashboard() {
             setApprovalNote('');
           }}
         />
+      )}
+
+      {/* Export Options Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><Download className="w-5 h-5 mr-2"/>Export Options</h3>
+            <p className="text-sm text-gray-300 mb-4">Choose which sections to include in the CSV export.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <label className="flex items-center space-x-2 bg-gray-700/50 px-3 py-2 rounded">
+                <input type="checkbox" checked={exportOptions.includeBasic} onChange={(e)=>setExportOptions({...exportOptions, includeBasic:e.target.checked})} />
+                <span className="text-sm text-white">Basic Profile</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-700/50 px-3 py-2 rounded">
+                <input type="checkbox" checked={exportOptions.includeSectoral} onChange={(e)=>setExportOptions({...exportOptions, includeSectoral:e.target.checked})} />
+                <span className="text-sm text-white">Sectoral Information</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-700/50 px-3 py-2 rounded">
+                <input type="checkbox" checked={exportOptions.includeLivelihood} onChange={(e)=>setExportOptions({...exportOptions, includeLivelihood:e.target.checked})} />
+                <span className="text-sm text-white">Livelihood Programs</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-700/50 px-3 py-2 rounded">
+                <input type="checkbox" checked={exportOptions.includeSocialBenefits} onChange={(e)=>setExportOptions({...exportOptions, includeSocialBenefits:e.target.checked})} />
+                <span className="text-sm text-white">Social Benefits</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-700/50 px-3 py-2 rounded">
+                <input type="checkbox" checked={exportOptions.includeLocalGovBenefits} onChange={(e)=>setExportOptions({...exportOptions, includeLocalGovBenefits:e.target.checked})} />
+                <span className="text-sm text-white">Local Gov Benefits</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-700/50 px-3 py-2 rounded">
+                <input type="checkbox" checked={exportOptions.includeGovernmentBenefits} onChange={(e)=>setExportOptions({...exportOptions, includeGovernmentBenefits:e.target.checked})} />
+                <span className="text-sm text-white">Government Pensions/Benefits</span>
+              </label>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button onClick={()=>setShowExportModal(false)} variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">Cancel</Button>
+              <Button onClick={exportUsersData} className="bg-blue-600 hover:bg-blue-700">Export CSV</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><Edit3 className="w-5 h-5 mr-2"/>Edit User</h3>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">First Name</label>
+                <input value={editFormData.firstName} onChange={(e)=>setEditFormData({...editFormData, firstName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Last Name</label>
+                <input value={editFormData.lastName} onChange={(e)=>setEditFormData({...editFormData, lastName:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">Email</label>
+                <input type="email" value={editFormData.email} onChange={(e)=>setEditFormData({...editFormData, email:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">Birth Date</label>
+                <input type="date" value={editFormData.birthDate} onChange={(e)=>setEditFormData({...editFormData, birthDate:e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button onClick={()=>{setShowEditModal(false);}} variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">Cancel</Button>
+              <Button onClick={handleEditSave} className="bg-blue-600 hover:bg-blue-700">Save Changes</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Email Modal */}
+      {showEmailModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><Send className="w-5 h-5 mr-2"/>Send Email</h3>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">To</label>
+                <div className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-gray-300 text-sm">{selectedUser.email}</div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Subject</label>
+                <input value={emailSubject} onChange={(e)=>setEmailSubject(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Message</label>
+                <textarea value={emailBody} onChange={(e)=>setEmailBody(e.target.value)} rows={5} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none resize-none" />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button onClick={()=>{setShowEmailModal(false);}} variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">Cancel</Button>
+              <Button onClick={handleSendEmail} className="bg-green-600 hover:bg-green-700">Send</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suspend User Modal */}
+      {showSuspendModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center"><Ban className="w-5 h-5 mr-2"/>Suspend User</h3>
+            <p className="text-sm text-gray-300 mb-4">Suspend <span className="font-medium">{selectedUser.firstName} {selectedUser.lastName}</span>. This will restrict access until reinstated.</p>
+            <div className="mb-4">
+              <label className="block text-xs text-gray-400 mb-1">Note (optional)</label>
+              <textarea value={suspendNote} onChange={(e)=>setSuspendNote(e.target.value)} rows={4} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none resize-none" />
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button onClick={()=>{setShowSuspendModal(false);}} variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">Cancel</Button>
+              <Button onClick={handleConfirmSuspend} className="bg-red-600 hover:bg-red-700">Confirm Suspend</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
